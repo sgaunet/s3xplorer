@@ -1,0 +1,8 @@
+s3endpoint:
+s3region: "eu-west-3"
+accesskey: 
+apikey: 
+ssoawsprofile: my-profile
+bucket: my-bucket
+
+loglevel: info
