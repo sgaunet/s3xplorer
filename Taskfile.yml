@@ -1,0 +1,53 @@
+# https://taskfile.dev
+version: '3'
+vars:
+  BINFILE: s3xplorer
+
+tasks:
+  default:
+    desc: "List all tasks"
+    cmds:
+      - task -a
+
+  build:
+    desc: "Build the binary"
+    cmds:
+      - CGO_ENABLED=0 go build .
+
+  minio:
+    desc: "Launch minio server"
+    dir: conf-examples
+    cmds:
+      - docker-compose up -d
+
+  run:
+    desc: "Run the binary with minio server"
+    deps: 
+    - minio
+    cmds:
+      - go run . -f conf-examples/config-minio.yaml
+
+  image:
+    desc: "Build/push the docker image version latest"
+    cmds:
+      - docker build . -t sgaunet/{{.BINFILE}}:latest --push
+
+  scan-vuln:
+    desc: "Scan the docker image for vulnerabilities"
+    deps:
+      - image
+    cmds:
+      - "trivy image sgaunet/{{.BINFILE}}:latest | grep -q 'HIGH: 0, CRITICAL: 0'"
+      - grype -f high docker:sgaunet/{{.BINFILE}}:latest --scope all-layers --add-cpes-if-none
+    
+  snapshot:
+    desc: "Create a snapshot release"
+    cmds:
+      - GITLAB_TOKEN="" goreleaser --clean --snapshot
+
+  release:
+    desc: "Create a release"
+    cmds:
+      - GITLAB_TOKEN="" goreleaser --clean
+
+    
