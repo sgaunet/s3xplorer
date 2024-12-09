@@ -14,6 +14,7 @@ type Config struct {
 	S3Region      string `yaml:"s3region"`
 	SsoAwsProfile string `yaml:"ssoawsprofile"`
 	Bucket        string `yaml:"bucket"`
+	Prefix        string `yaml:"prefix"`
 	LogLevel      string `yaml:"loglevel"`
 }
 

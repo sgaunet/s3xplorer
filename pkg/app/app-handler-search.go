@@ -17,14 +17,14 @@ func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request)
 		searchFile = searchstr[0]
 	}
 
-	objects, err := s.s3svc.SearchObjects("", searchFile)
+	objects, err := s.s3svc.SearchObjects(s.cfg.Prefix, searchFile)
 	if err != nil {
 		s.views.HandlerError(response, err.Error())
 		return
 	}
 
 	err = s.views.RenderSearch(response, views.SearchData{
-		ActualFolder: "",
+		ActualFolder: s.cfg.Prefix,
 		Objects:      objects,
 		SearchStr:    searchFile,
 	})

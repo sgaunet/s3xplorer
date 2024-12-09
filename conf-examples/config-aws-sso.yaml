@@ -1,8 +1,11 @@
+# not mandatory, can use the endpoint and region from the aws profile
 s3endpoint:
 s3region: "eu-west-3"
 accesskey: 
 apikey: 
 ssoawsprofile: my-profile
 bucket: my-bucket
+# set the prefix if you want to restrict the access to a specific folder
+prefix: my-folder
 
 loglevel: info
