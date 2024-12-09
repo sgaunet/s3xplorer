@@ -41,9 +41,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// os.Exit(0)
 	<-ctx.Done()
-	fmt.Println("INFO: stop server http and close DB connection")
+	fmt.Println("INFO: stop http server")
 	s.StopServer()
 }
 
