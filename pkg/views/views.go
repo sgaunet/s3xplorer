@@ -3,11 +3,11 @@ package views
 import (
 	"embed"
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"net/http"
 	"path/filepath"
-	"text/template"
 
 	"github.com/sgaunet/s3xplorer/pkg/dto"
 )
