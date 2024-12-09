@@ -15,7 +15,7 @@ In the beginning, this project was a POC to play with aws golang sdk v2 and the 
 
 * Use the binary in the release page
 * Or the Docker image
-* An helm chart will be available soon
+* Or [helm chart](https://github.com/sgaunet/helm-s3xplorer)
 
 ## Configuration
 
