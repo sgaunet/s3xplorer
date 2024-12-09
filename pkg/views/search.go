@@ -2,10 +2,10 @@ package views
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"path/filepath"
-	"text/template"
 
 	"github.com/sgaunet/s3xplorer/pkg/dto"
 )

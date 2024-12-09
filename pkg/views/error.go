@@ -1,10 +1,10 @@
 package views
 
 import (
+	"html/template"
 	"io/fs"
 	"net/http"
 	"path/filepath"
-	"text/template"
 )
 
 // HandlerError renders the error page

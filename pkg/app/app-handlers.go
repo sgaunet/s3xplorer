@@ -145,5 +145,5 @@ func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 		s.log.Errorln(err.Error())
 	}
 	s.log.Debugln("f=", f)
-	http.Redirect(w, request, "/"+s.cfg.Bucket+"?folder="+f, http.StatusMovedPermanently)
+	http.Redirect(w, request, "/?folder="+f, http.StatusTemporaryRedirect)
 }
