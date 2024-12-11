@@ -2,6 +2,7 @@ package app
 
 import "github.com/sgaunet/s3xplorer/pkg/views"
 
+// initRouter initializes the router of the App
 func (s *App) initRouter() {
 	s.router.PathPrefix("/static").Handler(s.views.GetStaticHandler())
 	s.router.HandleFunc("/favicon.ico", views.FaviconHandler)

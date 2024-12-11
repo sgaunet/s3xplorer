@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Config is the struct for the configuration
 type Config struct {
 	S3endpoint    string `yaml:"s3endpoint"`
 	S3accessKey   string `yaml:"accesskey"`

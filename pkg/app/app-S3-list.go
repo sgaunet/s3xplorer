@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -28,8 +29,10 @@ import (
 // 	return err
 // }
 
+// GetAwsConfig returns an aws.Config
 func (s *App) GetAwsConfig() (cfg aws.Config, err error) {
 	if s.cfg.S3endpoint != "" {
+		s.log.Debug("Try to use S3 endpoint")
 		staticResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
 			return aws.Endpoint{
 				PartitionID:       "aws",
@@ -48,17 +51,27 @@ func (s *App) GetAwsConfig() (cfg aws.Config, err error) {
 	}
 
 	if s.cfg.SsoAwsProfile != "" {
-		fmt.Println("Try to use SSO profile")
+		s.log.Debug("Try to use SSO profile")
 		cfg, err = config.LoadDefaultConfig(
 			context.TODO(),
 			config.WithSharedConfigProfile(s.cfg.SsoAwsProfile),
 		)
-		return
+		if err != nil {
+			s.log.Error("Error loading SSO profile", slog.String("error", err.Error()))
+			return cfg, fmt.Errorf("error loading SSO profile: %w", err)
+		}
+		s.log.Debug("SSO profile loaded")
+		return cfg, nil
 	}
 
 	if s.cfg.S3ApikKey == "" && s.cfg.S3accessKey == "" {
 		cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(s.cfg.S3Region))
-		return
+		if err != nil {
+			s.log.Error("Error loading default config", slog.String("error", err.Error()))
+			return cfg, fmt.Errorf("error loading default config: %w", err)
+		}
+		s.log.Debug("Default config loaded")
+		return cfg, nil
 	}
 	return cfg, errors.New("no method to initialize aws.Config")
 }

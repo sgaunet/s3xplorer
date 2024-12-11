@@ -8,4 +8,5 @@ bucket: my-bucket
 # set the prefix if you want to restrict the access to a specific folder
 prefix: my-folder
 
+# loglevel: debug | info | warn | error
 loglevel: info

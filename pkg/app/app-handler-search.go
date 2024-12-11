@@ -1,11 +1,13 @@
 package app
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/sgaunet/s3xplorer/pkg/views"
 )
 
+// SearchHandler handles the search request
 func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request) {
 	var err error
 	var searchFile string
@@ -16,9 +18,11 @@ func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request)
 	} else {
 		searchFile = searchstr[0]
 	}
+	s.log.Debug("SearchHandler", slog.String("searchFile", searchFile))
 
 	objects, err := s.s3svc.SearchObjects(s.cfg.Prefix, searchFile)
 	if err != nil {
+		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
 		s.views.HandlerError(response, err.Error())
 		return
 	}
@@ -29,6 +33,7 @@ func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request)
 		SearchStr:    searchFile,
 	})
 	if err != nil {
+		slog.Error("SearchHandler: error when called RenderSearch", slog.String("error", err.Error()))
 		s.views.HandlerError(response, err.Error())
 		return
 	}

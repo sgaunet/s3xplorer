@@ -34,6 +34,7 @@ bucket: example
 # don't forget to add the trailing slash at the end
 prefix: rando/
 
+# loglevel: debug | info | warn | error
 loglevel: info
 ```
 
@@ -50,6 +51,7 @@ ssoawsprofile: dev
 bucket: my-bucket
 prefix: ""
 
+# loglevel: debug | info | warn | error
 loglevel: info
 ```
 

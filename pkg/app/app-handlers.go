@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sgaunet/s3xplorer/pkg/views"
 )
 
+// IndexBucket handles the index request
 func (s *App) IndexBucket(response http.ResponseWriter, request *http.Request) {
 	var err error
 	var f string
@@ -34,14 +35,17 @@ func (s *App) IndexBucket(response http.ResponseWriter, request *http.Request) {
 			}
 		}
 	}
+	s.log.Debug("IndexBucket", slog.String("f", f))
 
 	lstFolders, err := s.s3svc.GetFolders(f)
 	if err != nil {
+		slog.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
 		s.views.HandlerError(response, err.Error())
 		return
 	}
 	objects, err := s.s3svc.GetObjects(f)
 	if err != nil {
+		slog.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
 		s.views.HandlerError(response, err.Error())
 		return
 	}
@@ -52,10 +56,10 @@ func (s *App) IndexBucket(response http.ResponseWriter, request *http.Request) {
 		Objects:      objects,
 	})
 	if err != nil {
+		slog.Error("IndexBucket: error when called RenderIndex", slog.String("error", err.Error()))
 		s.views.HandlerError(response, err.Error())
 		return
 	}
-
 }
 
 func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
@@ -63,11 +67,11 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	// vars := mux.Vars(request)
 	// bucket := vars["bucket"]
 	// key := vars["key"]
-	var cfg aws.Config
 
 	keys, ok := request.URL.Query()["key"]
 	if !ok || len(keys[0]) < 1 {
-		s.log.Debugln("Url Param 'key' is missing")
+		s.log.Error("Url Param 'key' is missing")
+		s.views.HandlerError(w, "Url Param 'key' is missing")
 		return
 	}
 
@@ -77,34 +81,29 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
+			s.log.Error("DownloadFile: Invalid key")
 			s.views.HandlerError(w, "Invalid key")
 			return
 		}
 	}
 
-	cfg, err = s.GetAwsConfig()
-	if err != nil {
-		v := views.NewViews()
-		v.HandlerError(w, err.Error())
-		return
-	}
-	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3
-	awsS3Client := s3.NewFromConfig(cfg)
-
 	p := s3.GetObjectInput{
 		Bucket: &s.cfg.Bucket,
 		Key:    &key,
 	}
-	o, err := awsS3Client.GetObject(context.TODO(), &p)
+	o, err := s.awsS3Client.GetObject(context.TODO(), &p)
 	if err != nil {
-		v := views.NewViews()
-		v.HandlerError(w, err.Error())
+		s.log.Error("DownloadFile: error when called GetObject", slog.String("error", err.Error()))
+		s.views.HandlerError(w, err.Error())
 		return
 	}
+
+	// All the file is read in memory, it's not a good idea for big files
+	// TODO: improve this
 	buffer, err := io.ReadAll(o.Body)
 	if err != nil {
-		v := views.NewViews()
-		v.HandlerError(w, err.Error())
+		s.log.Error("DownloadFile: error when called ReadAll", slog.String("error", err.Error()))
+		s.views.HandlerError(w, err.Error())
 		return
 	}
 
@@ -113,6 +112,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	http.ServeContent(w, request, key, time.Now(), bytes.NewReader(buffer))
 }
 
+// RestoreHandler restores an object from Glacier
 func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 	var err error
 	var f string
@@ -132,9 +132,11 @@ func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 	// Query()["key"] will return an array of items,
 	// we only want the single item.
 	key := keys[0]
+	s.log.Debug("RestoreHandler", slog.String("key", key), slog.String("f", f))
 
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
+			s.log.Error("RestoreHandler: Invalid key")
 			s.views.HandlerError(w, "Invalid key")
 			return
 		}
@@ -142,8 +144,9 @@ func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 
 	err = s.s3svc.RestoreObject(key)
 	if err != nil {
-		s.log.Errorln(err.Error())
+		s.log.Error("RestoreHandler: error when called RestoreObject", slog.String("error", err.Error()))
+		s.views.HandlerError(w, err.Error())
+		return
 	}
-	s.log.Debugln("f=", f)
 	http.Redirect(w, request, "/?folder="+f, http.StatusTemporaryRedirect)
 }

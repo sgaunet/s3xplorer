@@ -2,7 +2,10 @@ package s3svc
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -22,7 +25,7 @@ func (s *Service) GetFolders(parentFolder string) (result []dto.S3Object, err er
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetFolders: error of paginator.NextPage: %w", err)
 		}
 		for _, prefix := range page.CommonPrefixes {
 			obj := dto.S3Object{
@@ -44,9 +47,10 @@ func (s *Service) GetFolders(parentFolder string) (result []dto.S3Object, err er
 func (s *Service) GetAllFolders(parentFolder string) (result []dto.S3Object, err error) {
 	folders, err := s.GetFolders(parentFolder)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetAllFolders: error of GetFolders: %w", err)
 	}
 	if len(folders) == 0 {
+		s.log.Debug("GetAllFolders: no folders found")
 		return nil, nil
 	}
 
@@ -54,11 +58,13 @@ func (s *Service) GetAllFolders(parentFolder string) (result []dto.S3Object, err
 		result = append(result, folder)
 		subFolders, err := s.GetAllFolders(folder.Key)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetAllFolders: error of GetAllFolders: %w", err)
 		}
 		if len(subFolders) == 0 {
+			s.log.Debug("GetAllFolders: no subfolders found", slog.String("folder", folder.Key))
 			continue
 		}
+		s.log.Debug("GetAllFolders: subfolders found", slog.String("folder", folder.Key))
 		result = append(result, subFolders...)
 	}
 	return result, nil

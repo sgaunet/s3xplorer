@@ -2,6 +2,7 @@ package s3svc
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,12 +24,12 @@ func (s *Service) GetObjects(parentFolder string) (result []dto.S3Object, err er
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetObjects: error of paginator.NextPage: %w", err)
 		}
 		for _, obj := range page.Contents {
 			isDownloadable, isRestoring, err := s.IsDownloadable(*obj.Key)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("GetObjects: error of IsDownloadable: %w", err)
 			}
 			result = append(result, dto.S3Object{
 				Key:            *obj.Key,
@@ -54,7 +55,7 @@ func (s *Service) SearchObjects(prefix string, fileToSearch string) (result []dt
 
 	folders, err := s.GetAllFolders(prefix)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SearchObjects: error of GetAllFolders: %w", err)
 	}
 
 	for _, folder := range folders {
@@ -67,13 +68,13 @@ func (s *Service) SearchObjects(prefix string, fileToSearch string) (result []dt
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.TODO())
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("SearchObjects: error of paginator.NextPage: %w", err)
 			}
 			for _, obj := range page.Contents {
 				if strings.Contains(*obj.Key, fileToSearch) {
 					isDownloadable, isRestoring, err := s.IsDownloadable(*obj.Key)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("SearchObjects: error of IsDownloadable: %w", err)
 					}
 					result = append(result, dto.S3Object{
 						Key:            *obj.Key,

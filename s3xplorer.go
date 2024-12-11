@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,39 +20,72 @@ func main() {
 	flag.StringVar(&fileName, "f", "", "Configuration file")
 	flag.Parse()
 
+	// Check if the configuration file is provided
 	if fileName == "" {
-		fmt.Println("Configuration file not provided. Exit 1")
-		fmt.Printf("\nUsage:\n")
+		fmt.Fprintf(os.Stderr, "Configuration file not provided. Exit 1")
+		fmt.Fprintf(os.Stderr, "\nUsage:\n")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
+	// Read the configuration file
 	if cfg, err = config.ReadYamlCnxFile(fileName); err != nil {
-		fmt.Println(err.Error())
+		fmt.Fprintf(os.Stderr, "Error reading configuration file: %s\n", err.Error())
 		os.Exit(1)
 	}
+	// Initialize the logger
+	l := initTrace(cfg.LogLevel)
 
 	// Handle SIGTERM/SIGINT
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	SetupCloseHandler(ctx, cancelFunc)
+	SetupCloseHandler(ctx, cancelFunc, l)
 
+	// Create the app
 	s, err := app.NewApp(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		l.Error("error creating the app: %s", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	s.SetLogger(l)
 
 	<-ctx.Done()
-	fmt.Println("INFO: stop http server")
+	l.Info("stop the server")
 	s.StopServer()
 }
 
-func SetupCloseHandler(ctx context.Context, cancelFunc context.CancelFunc) {
+func SetupCloseHandler(ctx context.Context, cancelFunc context.CancelFunc, log *slog.Logger) {
 	c := make(chan os.Signal, 5)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		s := <-c
-		fmt.Println("INFO: Signal received:", s)
+		log.Info("INFO: signal received", slog.String("signal", s.String()))
 		cancelFunc()
 	}()
+}
+
+// initTrace initializes the logger
+func initTrace(debugLevel string) *slog.Logger {
+	handlerOptions := &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		// AddSource: true,
+	}
+
+	switch debugLevel {
+	case "debug":
+		handlerOptions.Level = slog.LevelDebug
+		handlerOptions.AddSource = true
+	case "info":
+		handlerOptions.Level = slog.LevelInfo
+	case "warn":
+		handlerOptions.Level = slog.LevelWarn
+	case "error":
+		handlerOptions.Level = slog.LevelError
+	default:
+		handlerOptions.Level = slog.LevelInfo
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, handlerOptions)
+	// handler := slog.NewJSONHandler(os.Stdout, nil) // JSON format
+	logger := slog.New(handler)
+	return logger
 }
