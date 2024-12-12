@@ -1,12 +1,10 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"strings"
 
@@ -97,19 +95,16 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 		s.views.HandlerError(w, err.Error())
 		return
 	}
-
-	// All the file is read in memory, it's not a good idea for big files
-	// TODO: improve this
-	buffer, err := io.ReadAll(o.Body)
-	if err != nil {
-		s.log.Error("DownloadFile: error when called ReadAll", slog.String("error", err.Error()))
-		s.views.HandlerError(w, err.Error())
-		return
-	}
+	defer o.Body.Close()
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+key)
 	w.Header().Set("Content-Type", request.Header.Get("Content-Type"))
-	http.ServeContent(w, request, key, time.Now(), bytes.NewReader(buffer))
+	_, err = io.Copy(w, o.Body)
+	if err != nil {
+		s.log.Error("DownloadFile: error when called Copy", slog.String("error", err.Error()))
+		s.views.HandlerError(w, err.Error())
+		return
+	}
 }
 
 // RestoreHandler restores an object from Glacier
