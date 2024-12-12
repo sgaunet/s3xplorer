@@ -7,7 +7,7 @@
 
 s3xplorer is a web interface to parse a S3 bucket.
 
-In the beginning, this project was a POC to play with aws golang sdk v2 and the minio library. It's quite basic, it still needs refactor and improvements...
+In the beginning, this project was a POC to play with AWS golang SDK v2 and the minio library. It's quite basic, it still needs refactor and improvements...
 
 ![s3xplorer](img/v0.1.0.png)
 
@@ -16,6 +16,46 @@ In the beginning, this project was a POC to play with aws golang sdk v2 and the 
 * Use the binary in the release page
 * Or the Docker image
 * Or [helm chart](https://github.com/sgaunet/helm-s3xplorer)
+
+Check next section to see how to configure it.
+
+### Docker
+
+```yml
+version: '3.7'
+services:
+  minio-server:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z-cpuv1
+    ports:
+      - 9090:9000
+      - 8080:8080
+    environment: 
+      - MINIO_ROOT_USER=minioadminn
+      - MINIO_ROOT_PASSWORD=minioadminn
+    volumes:
+      - ./data:/export
+    command: minio server /export --console-address 0.0.0.0:8080
+
+  s3xplorer:
+    image: sgaunet/s3xplorer:<version>
+    ports:
+      - 8081:8081
+    volumes:
+      - ./config.yaml:/cfg.yaml
+    depends_on:
+      - minio-server
+```
+
+### Helm
+
+* Here is the [documentation of the helm chart](https://github.com/sgaunet/helm-s3xplorer/blob/main/charts/s3xplorer/README.md).
+* Here is the source code of the [helm chart](https://github.com/sgaunet/helm-s3xplorer).
+
+```bash
+helm repo add s3xplorer https://sgaunet.github.io/helm-s3xplorer/
+helm repo update
+helm search repo s3xplorer
+```
 
 ## Configuration
 
