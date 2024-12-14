@@ -95,6 +95,16 @@ prefix: ""
 loglevel: info
 ```
 
+To use AWS SSO, you need to have the AWS CLI installed and configured with the SSO profile.
+
+```bash
+aws sso login --profile <profile>
+s3xplorer -f config.yaml
+```
+
+Then you can use the profile in the configuration file.
+It's not recommended to use AWS SSO with this tool because the session will expire and you will need to re-authenticate.
+
 ## Usage
 
 ```bash
@@ -127,3 +137,7 @@ Launch task to see all available tasks:
 ```bash
 task
 ```
+
+## Performance
+
+Quite lighweight now since 0.3.0. Tests with 3 concurrents downloads of 5GB of each file, and less thant 30MB memory consumption.
