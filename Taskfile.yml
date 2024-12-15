@@ -12,19 +12,22 @@ tasks:
   build:
     desc: "Build the binary"
     cmds:
+      - templ generate
+      - go mod download
       - CGO_ENABLED=0 go build .
 
   minio:
     desc: "Launch minio server"
     dir: conf-examples
     cmds:
-      - docker-compose up -d
+      - docker compose up -d
 
   run:
     desc: "Run the binary with minio server"
     deps: 
     - minio
     cmds:
+      - templ generate
       - go run . -f conf-examples/config-minio.yaml
 
   image:
@@ -32,14 +35,6 @@ tasks:
     cmds:
       - docker build . -t sgaunet/{{.BINFILE}}:latest --push
 
-  scan-vuln:
-    desc: "Scan the docker image for vulnerabilities"
-    deps:
-      - image
-    cmds:
-      - "trivy image sgaunet/{{.BINFILE}}:latest | grep -q 'HIGH: 0, CRITICAL: 0'"
-      - grype -f high docker:sgaunet/{{.BINFILE}}:latest --scope all-layers --add-cpes-if-none
-    
   snapshot:
     desc: "Create a snapshot release"
     cmds:

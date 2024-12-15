@@ -3,3 +3,5 @@ s3xplorer
 .task
 dist
 *vault*
+*_templ.go
+.devbox

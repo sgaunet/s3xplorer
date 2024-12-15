@@ -1,0 +1,27 @@
+package views
+
+import "github.com/sgaunet/s3xplorer/pkg/dto"
+
+templ RenderSearch(searchStr string, folder string, objects []dto.S3Object) {
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>s3xplorer</title>
+    <link rel="stylesheet" href="/static/pico.css" />
+  </head>
+  <body>
+    @Menu()
+    
+    <div class="container-fluid">
+      <form action="/search">
+          <label for="searchstr">Search:</label>
+          <input type="text" id="searchstr" name="searchstr" class="rounded" value={ searchStr } >
+          <input type="submit" value="Submit" >
+      </form> 
+    </div>
+
+    @RenderListObjects(folder, objects)
+  </body>
+</html>
+}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -23,18 +24,9 @@ func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request)
 	objects, err := s.s3svc.SearchObjects(s.cfg.Prefix, searchFile)
 	if err != nil {
 		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
-		s.views.HandlerError(response, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), response)
 		return
 	}
 
-	err = s.views.RenderSearch(response, views.SearchData{
-		ActualFolder: s.cfg.Prefix,
-		Objects:      objects,
-		SearchStr:    searchFile,
-	})
-	if err != nil {
-		slog.Error("SearchHandler: error when called RenderSearch", slog.String("error", err.Error()))
-		s.views.HandlerError(response, err.Error())
-		return
-	}
+	views.RenderSearch(searchFile, s.cfg.Prefix, objects).Render(context.TODO(), response)
 }

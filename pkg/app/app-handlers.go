@@ -38,26 +38,17 @@ func (s *App) IndexBucket(response http.ResponseWriter, request *http.Request) {
 	lstFolders, err := s.s3svc.GetFolders(f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
-		s.views.HandlerError(response, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), response)
 		return
 	}
 	objects, err := s.s3svc.GetObjects(f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
-		s.views.HandlerError(response, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), response)
 		return
 	}
 
-	err = s.views.RenderIndex(response, views.IndexData{
-		ActualFolder: f,
-		Folders:      lstFolders,
-		Objects:      objects,
-	})
-	if err != nil {
-		slog.Error("IndexBucket: error when called RenderIndex", slog.String("error", err.Error()))
-		s.views.HandlerError(response, err.Error())
-		return
-	}
+	views.RenderIndex(lstFolders, objects, f).Render(context.TODO(), response)
 }
 
 func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
@@ -69,7 +60,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	keys, ok := request.URL.Query()["key"]
 	if !ok || len(keys[0]) < 1 {
 		s.log.Error("Url Param 'key' is missing")
-		s.views.HandlerError(w, "Url Param 'key' is missing")
+		views.RenderError("Url Param 'key' is missing").Render(context.TODO(), w)
 		return
 	}
 
@@ -80,7 +71,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
 			s.log.Error("DownloadFile: Invalid key")
-			s.views.HandlerError(w, "Invalid key")
+			views.RenderError("Invalid key").Render(context.TODO(), w)
 			return
 		}
 	}
@@ -92,7 +83,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	o, err := s.awsS3Client.GetObject(context.TODO(), &p)
 	if err != nil {
 		s.log.Error("DownloadFile: error when called GetObject", slog.String("error", err.Error()))
-		s.views.HandlerError(w, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), w)
 		return
 	}
 	defer o.Body.Close()
@@ -102,7 +93,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, request *http.Request) {
 	_, err = io.Copy(w, o.Body)
 	if err != nil {
 		s.log.Error("DownloadFile: error when called Copy", slog.String("error", err.Error()))
-		s.views.HandlerError(w, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), w)
 		return
 	}
 }
@@ -132,7 +123,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
 			s.log.Error("RestoreHandler: Invalid key")
-			s.views.HandlerError(w, "Invalid key")
+			views.RenderError("Invalid key").Render(context.TODO(), w)
 			return
 		}
 	}
@@ -140,7 +131,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, request *http.Request) {
 	err = s.s3svc.RestoreObject(key)
 	if err != nil {
 		s.log.Error("RestoreHandler: error when called RestoreObject", slog.String("error", err.Error()))
-		s.views.HandlerError(w, err.Error())
+		views.RenderError(err.Error()).Render(context.TODO(), w)
 		return
 	}
 	http.Redirect(w, request, "/?folder="+f, http.StatusTemporaryRedirect)
