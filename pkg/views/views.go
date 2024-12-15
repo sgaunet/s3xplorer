@@ -11,14 +11,10 @@ var staticCSS embed.FS
 //go:embed static/file-heart.png
 var faviconFS []byte
 
-type Views struct {
-	staticHandler http.Handler
-}
+// staticHandler is a http.Handler that serves static files
+var StaticHandler http.Handler
 
-func NewViews() *Views {
+func init() {
 	var staticFS = http.FS(staticCSS)
-	fsStatic := http.FileServer(staticFS)
-	return &Views{
-		staticHandler: fsStatic,
-	}
+	StaticHandler = http.FileServer(staticFS)
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sgaunet/s3xplorer/pkg/config"
 	"github.com/sgaunet/s3xplorer/pkg/s3svc"
-	"github.com/sgaunet/s3xplorer/pkg/views"
 )
 
 // App is the main structure of the application
@@ -21,7 +20,6 @@ type App struct {
 	awsS3Client *s3.Client
 	s3svc       *s3svc.Service
 	router      *mux.Router
-	views       *views.Views
 	srv         *http.Server
 	log         *slog.Logger
 }
@@ -38,7 +36,6 @@ func NewApp(cfg config.Config) (*App, error) {
 	s := &App{
 		cfg:    cfg,
 		router: mux.NewRouter().StrictSlash(true),
-		views:  views.NewViews(),
 		log:    emptyLogger(),
 		srv:    &http.Server{},
 	}

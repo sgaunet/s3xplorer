@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
@@ -9,11 +8,11 @@ import (
 )
 
 // SearchHandler handles the search request
-func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request) {
+func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var searchFile string
 
-	searchstr, ok := request.URL.Query()["searchstr"]
+	searchstr, ok := r.URL.Query()["searchstr"]
 	if !ok || len(searchstr[0]) < 1 {
 		searchFile = ""
 	} else {
@@ -24,9 +23,9 @@ func (s *App) SearchHandler(response http.ResponseWriter, request *http.Request)
 	objects, err := s.s3svc.SearchObjects(s.cfg.Prefix, searchFile)
 	if err != nil {
 		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(context.TODO(), response)
+		views.RenderError(err.Error()).Render(r.Context(), w)
 		return
 	}
 
-	views.RenderSearch(searchFile, s.cfg.Prefix, objects).Render(context.TODO(), response)
+	views.RenderSearch(searchFile, s.cfg.Prefix, objects).Render(r.Context(), w)
 }
