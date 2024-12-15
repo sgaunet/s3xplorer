@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.13.4/.schema/devbox.schema.json",
+  "packages": [
+    "templ@0.2.793",
+    "goreleaser@2.4.8",
+    "go@1.23.3",
+    "go-task@3.40.0"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to devbox!' > /dev/null"
+    ],
+    "scripts": {
+      "build": [
+        "task build"
+      ],
+      "run": [
+        "task run"
+      ],
+      "snapshot": [
+        "task snapshot"
+      ],
+      "release": [
+        "task release"
+      ]
+    }
+  }
+}

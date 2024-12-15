@@ -3,6 +3,7 @@ project_name: s3xplorer
 before:
   hooks:
     - go mod download
+    - templ generate
 builds:
   - env:
       - CGO_ENABLED=0
