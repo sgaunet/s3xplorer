@@ -20,7 +20,7 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Debug("SearchHandler", slog.String("searchFile", searchFile))
 
-	objects, err := s.s3svc.SearchObjects(s.cfg.Prefix, searchFile)
+	objects, err := s.s3svc.SearchObjects(r.Context(), s.cfg.Prefix, searchFile)
 	if err != nil {
 		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
 		views.RenderError(err.Error()).Render(r.Context(), w)

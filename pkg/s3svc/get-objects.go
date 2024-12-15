@@ -11,7 +11,7 @@ import (
 )
 
 // GetObjects returns a list of objects in the parentFolder
-func (s *Service) GetObjects(parentFolder string) (result []dto.S3Object, err error) {
+func (s *Service) GetObjects(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
 	var prefix string = parentFolder
 	var delimeter string = "/"
 
@@ -22,12 +22,12 @@ func (s *Service) GetObjects(parentFolder string) (result []dto.S3Object, err er
 	})
 
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(context.TODO())
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("GetObjects: error of paginator.NextPage: %w", err)
 		}
 		for _, obj := range page.Contents {
-			isDownloadable, isRestoring, err := s.IsDownloadable(*obj.Key)
+			isDownloadable, isRestoring, err := s.IsDownloadable(ctx, *obj.Key)
 			if err != nil {
 				return nil, fmt.Errorf("GetObjects: error of IsDownloadable: %w", err)
 			}
@@ -46,14 +46,14 @@ func (s *Service) GetObjects(parentFolder string) (result []dto.S3Object, err er
 }
 
 // SearchObjects returns a list of objects in the parentFolder that match the fileToSearch
-func (s *Service) SearchObjects(prefix string, fileToSearch string) (result []dto.S3Object, err error) {
+func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch string) (result []dto.S3Object, err error) {
 	var delimeter string = "/"
 
 	if fileToSearch == "" {
 		return nil, nil
 	}
 
-	folders, err := s.GetAllFolders(prefix)
+	folders, err := s.GetAllFolders(ctx, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("SearchObjects: error of GetAllFolders: %w", err)
 	}
@@ -66,13 +66,13 @@ func (s *Service) SearchObjects(prefix string, fileToSearch string) (result []dt
 		})
 
 		for paginator.HasMorePages() {
-			page, err := paginator.NextPage(context.TODO())
+			page, err := paginator.NextPage(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("SearchObjects: error of paginator.NextPage: %w", err)
 			}
 			for _, obj := range page.Contents {
 				if strings.Contains(*obj.Key, fileToSearch) {
-					isDownloadable, isRestoring, err := s.IsDownloadable(*obj.Key)
+					isDownloadable, isRestoring, err := s.IsDownloadable(ctx, *obj.Key)
 					if err != nil {
 						return nil, fmt.Errorf("SearchObjects: error of IsDownloadable: %w", err)
 					}

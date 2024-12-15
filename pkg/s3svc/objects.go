@@ -16,12 +16,12 @@ import (
 const DefaultRetentionPolicyInDays int32 = 2
 
 // IsDownloadable returns true if the object is downloadable
-func (s *Service) IsDownloadable(key string) (isDownloadable bool, isRestoring bool, err error) {
+func (s *Service) IsDownloadable(ctx context.Context, key string) (isDownloadable bool, isRestoring bool, err error) {
 	hi := s3.HeadObjectInput{
 		Bucket: &s.cfg.Bucket,
 		Key:    &key,
 	}
-	o, err := s.awsS3Client.HeadObject(context.TODO(), &hi)
+	o, err := s.awsS3Client.HeadObject(ctx, &hi)
 	if err != nil {
 		isDownloadable = false
 		isRestoring = false
@@ -66,7 +66,7 @@ func (s *Service) IsDownloadable(key string) (isDownloadable bool, isRestoring b
 }
 
 // RestoreObject restores an object
-func (s *Service) RestoreObject(key string) (err error) {
+func (s *Service) RestoreObject(ctx context.Context, key string) (err error) {
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3@v1.26.0/types#RestoreRequest
 	tt := types.GlacierJobParameters{
 		Tier: "Standard",
@@ -84,7 +84,7 @@ func (s *Service) RestoreObject(key string) (err error) {
 		Key:            &key,
 		RestoreRequest: &r,
 	}
-	o, err := s.awsS3Client.RestoreObject(context.TODO(), &p)
+	o, err := s.awsS3Client.RestoreObject(ctx, &p)
 	if err != nil {
 		return fmt.Errorf("RestoreObject: error when called RestoreObject: %w", err)
 	}

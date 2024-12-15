@@ -34,13 +34,13 @@ func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Debug("IndexBucket", slog.String("f", f))
 
-	lstFolders, err := s.s3svc.GetFolders(f)
+	lstFolders, err := s.s3svc.GetFolders(r.Context(), f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
 		views.RenderError(err.Error()).Render(r.Context(), w)
 		return
 	}
-	objects, err := s.s3svc.GetObjects(f)
+	objects, err := s.s3svc.GetObjects(r.Context(), f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
 		views.RenderError(err.Error()).Render(r.Context(), w)
@@ -127,7 +127,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = s.s3svc.RestoreObject(key)
+	err = s.s3svc.RestoreObject(r.Context(), key)
 	if err != nil {
 		s.log.Error("RestoreHandler: error when called RestoreObject", slog.String("error", err.Error()))
 		views.RenderError(err.Error()).Render(r.Context(), w)

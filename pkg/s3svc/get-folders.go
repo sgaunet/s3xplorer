@@ -13,7 +13,7 @@ import (
 )
 
 // GetFolders returns a list of folders in the parentFolder
-func (s *Service) GetFolders(parentFolder string) (result []dto.S3Object, err error) {
+func (s *Service) GetFolders(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
 	var delimeter string = "/"
 
 	paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
@@ -23,7 +23,7 @@ func (s *Service) GetFolders(parentFolder string) (result []dto.S3Object, err er
 	})
 
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(context.TODO())
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("GetFolders: error of paginator.NextPage: %w", err)
 		}
@@ -44,8 +44,8 @@ func (s *Service) GetFolders(parentFolder string) (result []dto.S3Object, err er
 }
 
 // GetAllFolders returns a list of all folders in the parentFolder and its subfolders
-func (s *Service) GetAllFolders(parentFolder string) (result []dto.S3Object, err error) {
-	folders, err := s.GetFolders(parentFolder)
+func (s *Service) GetAllFolders(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
+	folders, err := s.GetFolders(ctx, parentFolder)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllFolders: error of GetFolders: %w", err)
 	}
@@ -56,7 +56,7 @@ func (s *Service) GetAllFolders(parentFolder string) (result []dto.S3Object, err
 
 	for _, folder := range folders {
 		result = append(result, folder)
-		subFolders, err := s.GetAllFolders(folder.Key)
+		subFolders, err := s.GetAllFolders(ctx, folder.Key)
 		if err != nil {
 			return nil, fmt.Errorf("GetAllFolders: error of GetAllFolders: %w", err)
 		}
