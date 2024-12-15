@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/sgaunet/s3xplorer/pkg/config"
@@ -32,23 +31,20 @@ func emptyLogger() *slog.Logger {
 // NewApp creates a new App
 // NewApp initializes the S3 client and launch the web server in a goroutine
 // By default the logger is set to write to /dev/null
-func NewApp(cfg config.Config) (*App, error) {
+func NewApp(cfg config.Config, s3Client *s3.Client) *App {
 	s := &App{
-		cfg:    cfg,
-		router: mux.NewRouter().StrictSlash(true),
-		log:    emptyLogger(),
-		srv:    &http.Server{},
-	}
-	err := s.initS3Client()
-	if err != nil {
-		return s, err
+		cfg:         cfg,
+		awsS3Client: s3Client,
+		router:      mux.NewRouter().StrictSlash(true),
+		log:         emptyLogger(),
+		srv:         &http.Server{},
 	}
 	s.s3svc = s3svc.NewS3Svc(cfg, s.awsS3Client)
 
 	s.initRouter()
 	go s.startWebServer()
 
-	return s, err
+	return s
 }
 
 // SetLogger sets the logger of the App
@@ -74,18 +70,6 @@ func (s *App) StopServer() error {
 	if err := s.srv.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("error stopping server: %w", err)
 	}
-	return nil
-}
-
-// initS3Client initializes the S3 client
-func (s *App) initS3Client() (err error) {
-	var cfg aws.Config
-	cfg, err = s.GetAwsConfig()
-	if err != nil {
-		return fmt.Errorf("error getting AWS config: %w", err)
-	}
-	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3
-	s.awsS3Client = s3.NewFromConfig(cfg)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -9,14 +10,18 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sgaunet/s3xplorer/pkg/app"
-	"github.com/sgaunet/s3xplorer/pkg/config"
+	configapp "github.com/sgaunet/s3xplorer/pkg/config"
 )
 
 func main() {
 	var err error
 	var fileName string
-	var cfg config.Config
+	var cfg configapp.Config
 	flag.StringVar(&fileName, "f", "", "Configuration file")
 	flag.Parse()
 
@@ -29,7 +34,7 @@ func main() {
 	}
 
 	// Read the configuration file
-	if cfg, err = config.ReadYamlCnxFile(fileName); err != nil {
+	if cfg, err = configapp.ReadYamlCnxFile(fileName); err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading configuration file: %s\n", err.Error())
 		os.Exit(1)
 	}
@@ -40,12 +45,15 @@ func main() {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	SetupCloseHandler(ctx, cancelFunc, l)
 
-	// Create the app
-	s, err := app.NewApp(cfg)
+	// initialize the S3 client
+	s3Client, err := initS3Client(ctx, cfg)
 	if err != nil {
-		l.Error("error creating the app: %s", slog.String("error", err.Error()))
+		l.Error("error initializing the S3 client: %s", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+
+	// Create the app
+	s := app.NewApp(cfg, s3Client)
 	s.SetLogger(l)
 
 	<-ctx.Done()
@@ -88,4 +96,57 @@ func initTrace(debugLevel string) *slog.Logger {
 	// handler := slog.NewJSONHandler(os.Stdout, nil) // JSON format
 	logger := slog.New(handler)
 	return logger
+}
+
+// initS3Client initializes the S3 client
+func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, error) {
+	var cfg aws.Config
+	cfg, err := GetAwsConfig(ctx, configApp)
+	if err != nil {
+		return nil, fmt.Errorf("error getting AWS config: %w", err)
+	}
+	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3
+	return s3.NewFromConfig(cfg), nil
+}
+
+// GetAwsConfig returns an aws.Config
+func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (cfg aws.Config, err error) {
+	if cfgApp.S3endpoint != "" {
+		staticResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				PartitionID:       "aws",
+				URL:               cfgApp.S3endpoint, // or where ever you ran minio
+				SigningRegion:     cfgApp.S3Region,
+				HostnameImmutable: true,
+			}, nil
+		})
+
+		cfg = aws.Config{
+			Region:           cfgApp.S3Region,
+			Credentials:      credentials.NewStaticCredentialsProvider(cfgApp.S3ApikKey, cfgApp.S3accessKey, ""),
+			EndpointResolver: staticResolver,
+		}
+		return
+	}
+
+	if cfgApp.SsoAwsProfile != "" {
+		cfg, err = config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.SsoAwsProfile))
+		if err != nil {
+			// s.log.Error("Error loading SSO profile", slog.String("error", err.Error()))
+			return cfg, fmt.Errorf("error loading SSO profile: %w", err)
+		}
+		// s.log.Debug("SSO profile loaded")
+		return cfg, nil
+	}
+
+	if cfgApp.S3ApikKey == "" && cfgApp.S3accessKey == "" {
+		cfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(cfgApp.S3Region))
+		if err != nil {
+			// s.log.Error("Error loading default config", slog.String("error", err.Error()))
+			return cfg, fmt.Errorf("error loading default config: %w", err)
+		}
+		// s.log.Debug("Default config loaded")
+		return cfg, nil
+	}
+	return cfg, errors.New("no method to initialize aws.Config")
 }
