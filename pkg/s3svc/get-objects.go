@@ -3,6 +3,7 @@ package s3svc
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -48,7 +49,7 @@ func (s *Service) GetObjects(ctx context.Context, parentFolder string) (result [
 // SearchObjects returns a list of objects in the parentFolder that match the fileToSearch
 func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch string) (result []dto.S3Object, err error) {
 	var delimeter string = "/"
-
+	s.log.Debug("SearchObjects", slog.String("prefix", prefix), slog.String("fileToSearch", fileToSearch))
 	if fileToSearch == "" {
 		return nil, nil
 	}
@@ -57,6 +58,8 @@ func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch
 	if err != nil {
 		return nil, fmt.Errorf("SearchObjects: error of GetAllFolders: %w", err)
 	}
+	// Add the parent folder to the list of folders
+	folders = append(folders, dto.S3Object{Key: prefix})
 
 	for _, folder := range folders {
 		paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
@@ -71,6 +74,7 @@ func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch
 				return nil, fmt.Errorf("SearchObjects: error of paginator.NextPage: %w", err)
 			}
 			for _, obj := range page.Contents {
+				s.log.Debug("SearchObjects", slog.String("obj.Key", *obj.Key))
 				if strings.Contains(*obj.Key, fileToSearch) {
 					isDownloadable, isRestoring, err := s.IsDownloadable(ctx, *obj.Key)
 					if err != nil {
