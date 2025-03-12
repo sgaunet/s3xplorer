@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Create S3 bucket...
+Parameters:
+  env:
+    Description: Tag env
+    Type: String
+    AllowedValues: ["dev","prod"]
+
+Resources:
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Join [ "-", [  MyBucketName, !Ref env ] ] 
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierRule
+            Prefix: glacier
+            Status: Disabled
+            ExpirationInDays: '1825'     # 5 years
+            Transitions:
+              - TransitionInDays: '90'
+                StorageClass: GLACIER
+
+      AccessControl: Private
+      VersioningConfiguration: 
+        Status: Enabled
+      ObjectLockEnabled: true
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: COMPLIANCE
+            Days: "150"
+
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+    
+  S3UserExplorer:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+      - PolicyName: bucket-access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:  
+                # - s3:PutObject  not mandatory
+                - s3:GetObject
+                - s3:HeadObject
+                - s3:GetObjectVersion
+                - s3:GetObjectVersionAcl
+                # - s3:DeleteObject not mandatory
+                # - s3:DeleteObjectVersion not mandatory
+                - s3:ListObject*
+                # - s3:ListBucket  not mandatory
+              Resource:
+              - !Sub arn:aws:s3:::${MyS3Bucket}/prefix/*
+      - PolicyName: bucket-ls
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:  
+                - s3:ListBucket
+              Resource:
+              - !Sub arn:aws:s3:::${MyS3Bucket}
+
+  S3UserExplorerAccessKey:    
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref S3UserExplorer
+
+Outputs:  
+  BucketName:    
+    Value: !Ref 'MyS3Bucket'
+    Description: Name of the Amazon S3 bucket.  
+
+  S3BucketSecureURL:    
+    Value: !Join ['', ['https://', !GetAtt [MyS3Bucket, DomainName]]]
+    Description: Domain Name of the Amazon S3 bucket  
+
+  S3UserExplorerAccessKeyID:    
+    Value: !Ref S3UserExplorerAccessKey
+
+  S3UserExplorerSecretAccessKey:    
+    Value: !GetAtt S3UserExplorerAccessKey.SecretAccessKey
