@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+//go:generate go tool github.com/a-h/templ/cmd/templ generate
+
 //go:embed static
 var staticCSS embed.FS
 
