@@ -46,6 +46,8 @@ services:
       - minio-server
 ```
 
+Read configuration examples in [conf-examples](conf-examples) folder.
+
 ### Helm
 
 * Here is the [documentation of the helm chart](https://github.com/sgaunet/helm-s3xplorer/blob/main/charts/s3xplorer/README.md).
@@ -141,3 +143,7 @@ task
 ## Performance
 
 Quite lighweight now since 0.3.0. Tests with 3 concurrents downloads of 5GB of each file, and less thant 30MB memory consumption.
+
+## IAM Policy
+
+A cloudformation stack is available in [docs/stack-cloudformation.yaml](docs/stack-cloudformation.yaml) to create a bucket and a user with the right policy to access the bucket.
