@@ -3,7 +3,35 @@ package views
 import (
   "github.com/sgaunet/s3xplorer/pkg/dto"
   "fmt"
+  "math"
 )
+
+// formatSize converts a size in bytes to a human-readable string with appropriate unit (bytes, KB, MB, GB, TB)
+func formatSize(sizeInBytes int64) string {
+  if sizeInBytes == 0 {
+    return "0 Bytes"
+  }
+  
+  units := []string{"Bytes", "KB", "MB", "GB", "TB", "PB"}
+  base := float64(1024)
+  
+  // Get the unit index by dividing by 1024 repeatedly
+  i := math.Floor(math.Log(float64(sizeInBytes)) / math.Log(base))
+  
+  // Cap the unit index to the maximum available unit
+  if i >= float64(len(units)) {
+    i = float64(len(units) - 1)
+  }
+  
+  // Calculate the size in the selected unit
+  size := float64(sizeInBytes) / math.Pow(base, i)
+  
+  // Format the output with one decimal place for values >= 1 KB, and no decimal for bytes
+  if i == 0 {
+    return fmt.Sprintf("%d %s", int64(size), units[int(i)])
+  }
+  return fmt.Sprintf("%.1f %s", size, units[int(i)])
+}
 
 templ RenderListObjects(folder string, objects []dto.S3Object) {
   <div class="container-fluid">
@@ -57,7 +85,7 @@ templ RenderListObjects(folder string, objects []dto.S3Object) {
                   </td>
                 }
               <td>
-                { fmt.Sprintf("%d",obj.Size) }
+                { formatSize(obj.Size) }
               </td>
               <td>
                 { obj.ETag }
