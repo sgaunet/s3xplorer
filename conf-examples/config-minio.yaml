@@ -12,3 +12,10 @@ prefix: rando/
 
 # loglevel: debug | info | warn | error
 loglevel: info
+
+# Number of days that objects will be restored from Glacier (default: 2 if not specified)
+# restoredays: 7
+
+# Whether to enable the Glacier restore button (default: false if not specified)
+# If set to false, the restore button will not be shown for archived objects
+enableglacierrestore: true

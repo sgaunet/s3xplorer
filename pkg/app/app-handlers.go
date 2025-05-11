@@ -47,7 +47,7 @@ func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views.RenderIndex(lstFolders, objects, f).Render(r.Context(), w)
+	views.RenderIndex(lstFolders, objects, f, s.cfg).Render(r.Context(), w)
 }
 
 func (s *App) DownloadFile(w http.ResponseWriter, r *http.Request) {

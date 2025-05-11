@@ -9,14 +9,16 @@ import (
 
 // Config is the struct for the configuration
 type Config struct {
-	S3endpoint    string `yaml:"s3endpoint"`
-	S3accessKey   string `yaml:"accesskey"`
-	S3ApikKey     string `yaml:"apikey"`
-	S3Region      string `yaml:"s3region"`
-	SsoAwsProfile string `yaml:"ssoawsprofile"`
-	Bucket        string `yaml:"bucket"`
-	Prefix        string `yaml:"prefix"`
-	LogLevel      string `yaml:"loglevel"`
+	S3endpoint         string `yaml:"s3endpoint"`
+	S3accessKey        string `yaml:"accesskey"`
+	S3ApikKey          string `yaml:"apikey"`
+	S3Region           string `yaml:"s3region"`
+	SsoAwsProfile      string `yaml:"ssoawsprofile"`
+	Bucket             string `yaml:"bucket"`
+	Prefix             string `yaml:"prefix"`
+	LogLevel           string `yaml:"loglevel"`
+	RestoreDays        int    `yaml:"restoredays"`
+	EnableGlacierRestore bool  `yaml:"enableglacierrestore"`
 }
 
 // ReadYamlCnxFile reads a yaml file and returns a Config struct

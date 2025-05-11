@@ -95,6 +95,13 @@ prefix: ""
 
 # loglevel: debug | info | warn | error
 loglevel: info
+
+# Number of days that objects will be restored from Glacier (default: 2 if not specified)
+# restoredays: 7
+
+# Whether to enable the Glacier restore button (default: false if not specified)
+# If set to false, the restore button will not be shown for archived objects
+enableglacierrestore: true
 ```
 
 To use AWS SSO, you need to have the AWS CLI installed and configured with the SSO profile.
