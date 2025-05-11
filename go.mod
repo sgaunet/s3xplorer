@@ -3,6 +3,7 @@ module github.com/sgaunet/s3xplorer
 go 1.24
 
 require (
+	github.com/a-h/templ v0.3.865
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67
@@ -13,7 +14,6 @@ require (
 
 require (
 	github.com/a-h/parse v0.0.0-20250122154542-74294addb73e // indirect
-	github.com/a-h/templ v0.3.865 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.30 // indirect
