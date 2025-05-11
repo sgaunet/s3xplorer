@@ -17,6 +17,7 @@ type Config struct {
 	Bucket        string `yaml:"bucket"`
 	Prefix        string `yaml:"prefix"`
 	LogLevel      string `yaml:"loglevel"`
+	RestoreDays   int    `yaml:"restoredays"`
 }
 
 // ReadYamlCnxFile reads a yaml file and returns a Config struct

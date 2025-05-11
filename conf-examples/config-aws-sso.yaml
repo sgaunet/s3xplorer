@@ -9,4 +9,7 @@ bucket: my-bucket
 prefix: my-folder
 
 # loglevel: debug | info | warn | error
+
+# Number of days that objects will be restored from Glacier (default: 2 if not specified)
+# restoredays: 7
 loglevel: info

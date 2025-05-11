@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+// DefaultRetentionPolicyInDays is the default number of days that objects will be restored for if not specified in the config
 const DefaultRetentionPolicyInDays int32 = 2
 
 // IsDownloadable returns true if the object is downloadable
@@ -71,8 +72,18 @@ func (s *Service) RestoreObject(ctx context.Context, key string) (err error) {
 	tt := types.GlacierJobParameters{
 		Tier: "Standard",
 	}
+	
+	// Use configured RestoreDays if set, otherwise use the default
+	restoreDays := int32(s.cfg.RestoreDays)
+	if restoreDays <= 0 {
+		restoreDays = DefaultRetentionPolicyInDays
+		s.log.Debug("Using default restore days", slog.Int("days", int(DefaultRetentionPolicyInDays)))
+	} else {
+		s.log.Debug("Using configured restore days", slog.Int("days", s.cfg.RestoreDays))
+	}
+	
 	r := types.RestoreRequest{
-		Days: aws.Int32(DefaultRetentionPolicyInDays),
+		Days: aws.Int32(restoreDays),
 		// Type:           "SELECT",
 		GlacierJobParameters: &tt,
 		// Tier: "Standard",

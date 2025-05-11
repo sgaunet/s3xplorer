@@ -12,3 +12,6 @@ prefix: rando/
 
 # loglevel: debug | info | warn | error
 loglevel: info
+
+# Number of days that objects will be restored from Glacier (default: 2 if not specified)
+# restoredays: 7
