@@ -27,5 +27,5 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views.RenderSearch(searchFile, s.cfg.Prefix, objects).Render(r.Context(), w)
+	views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w)
 }

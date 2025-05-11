@@ -1,8 +1,11 @@
 package views
 
-import "github.com/sgaunet/s3xplorer/pkg/dto"
+import (
+  "github.com/sgaunet/s3xplorer/pkg/config"
+  "github.com/sgaunet/s3xplorer/pkg/dto"
+)
 
-templ RenderSearch(searchStr string, folder string, objects []dto.S3Object) {
+templ RenderSearch(searchStr string, folder string, objects []dto.S3Object, cfg config.Config) {
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -21,7 +24,7 @@ templ RenderSearch(searchStr string, folder string, objects []dto.S3Object) {
       </form> 
     </div>
 
-    @RenderListObjects(folder, objects)
+    @RenderListObjects(folder, objects, cfg)
   </body>
 </html>
 }
