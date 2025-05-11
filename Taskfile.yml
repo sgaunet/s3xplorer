@@ -12,7 +12,6 @@ tasks:
   build:
     desc: "Build the binary"
     cmds:
-      - templ generate
       - go mod download
       - CGO_ENABLED=0 go build .
 
@@ -27,7 +26,6 @@ tasks:
     deps: 
     - minio
     cmds:
-      - templ generate
       - go run . -f conf-examples/config-minio.yaml
 
   image:
