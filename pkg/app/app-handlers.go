@@ -24,11 +24,63 @@ var (
 
 // IndexBucket handles the index request.
 func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var err error
 	var f string
-	// vars := mux.Vars(request)
-	// bucket := vars["bucket"]
 
+	// Check if we're trying to switch buckets
+	switchBucket, hasSwitchParam := r.URL.Query()["switchBucket"]
+	if hasSwitchParam && len(switchBucket[0]) > 0 {
+		// Check if bucket switching is allowed
+		if s.cfg.BucketLocked {
+			// If bucket is locked (specified in config), don't allow changes
+			s.log.Warn("Attempted to switch buckets when bucket is locked in config", 
+				slog.String("current", s.cfg.Bucket),
+				slog.String("requested", switchBucket[0]))
+			
+			// Render an error page explaining that bucket is locked
+			s.renderErrorPage(ctx, w, "Bucket changes are not permitted when a bucket is explicitly defined in configuration")
+			return
+		}
+		
+		// Bucket switching is allowed, proceed with the change
+		newBucket := switchBucket[0]
+		s.log.Info("Switching bucket", slog.String("to", newBucket))
+		
+		// Update the bucket in the s3svc service
+		s.s3svc.SwitchBucket(newBucket)
+		
+		// Also update the bucket in the App's config to ensure consistency
+		// This is crucial for download functionality which uses App's config directly
+		s.cfg.Bucket = newBucket
+		s.cfg.Prefix = ""
+		
+		// Redirect to the root of the new bucket
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// Check if the bucket is empty, if so redirect to the bucket selection page
+	if s.cfg.Bucket == "" {
+		s.log.Info("No bucket configured, redirecting to bucket selection")
+		http.Redirect(w, r, "/buckets", http.StatusSeeOther)
+		return
+	}
+
+	// Check if the bucket exists but is empty (and not just because of a filter)
+	if s.cfg.Prefix == "" { 
+		isEmpty, err := s.s3svc.IsBucketEmpty(ctx)
+		if err != nil {
+			s.log.Error("Error checking if bucket is empty", slog.String("error", err.Error()))
+			// Continue anyway, we'll show an error on the main page if there are issues
+		} else if isEmpty {
+			s.log.Info("Bucket is empty, redirecting to bucket selection", slog.String("bucket", s.cfg.Bucket))
+			http.Redirect(w, r, "/buckets", http.StatusSeeOther)
+			return
+		}
+	}
+
+	// Handle folder parameter
 	folder, ok := r.URL.Query()["folder"]
 	if !ok || len(folder[0]) < 1 {
 		f = s.cfg.Prefix
@@ -45,26 +97,20 @@ func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Debug("IndexBucket", slog.String("f", f))
 
-	lstFolders, err := s.s3svc.GetFolders(r.Context(), f)
+	lstFolders, err := s.s3svc.GetFolders(ctx, f)
 	if err != nil {
 		s.log.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
-		if renderErr := views.RenderError(err.Error()).Render(r.Context(), w); renderErr != nil {
-			s.log.Error("Failed to render error page", slog.String("error", renderErr.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
+		s.renderErrorPage(ctx, w, err.Error())
 		return
 	}
-	objects, err := s.s3svc.GetObjects(r.Context(), f)
+	objects, err := s.s3svc.GetObjects(ctx, f)
 	if err != nil {
 		s.log.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
-		if renderErr := views.RenderError(err.Error()).Render(r.Context(), w); renderErr != nil {
-			s.log.Error("Failed to render error page", slog.String("error", renderErr.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
+		s.renderErrorPage(ctx, w, err.Error())
 		return
 	}
 
-	if err := views.RenderIndex(lstFolders, objects, f, s.cfg).Render(r.Context(), w); err != nil {
+	if err := views.RenderIndex(lstFolders, objects, f, s.cfg).Render(ctx, w); err != nil {
 		s.log.Error("Failed to render index page", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error rendering index page", http.StatusInternalServerError)
 	}

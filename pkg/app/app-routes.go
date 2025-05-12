@@ -10,5 +10,6 @@ func (s *App) initRouter() {
 	s.router.HandleFunc("/download", s.DownloadFile)
 	s.router.HandleFunc("/restore", s.RestoreHandler)
 	s.router.HandleFunc("/search", s.SearchHandler)
+	s.router.HandleFunc("/buckets", s.BucketListingHandler)
 	s.srv.Handler = s.router
 }

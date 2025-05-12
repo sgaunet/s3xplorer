@@ -16,7 +16,7 @@ templ RenderIndex(Folders []dto.S3Object, Objects []dto.S3Object, ActualFolder s
     <link rel="stylesheet" href="/static/pico.css" />
   </head>
   <body>
-    @Menu()
+    @MenuWithConfig(cfg)
        
     <div class="container-fluid">
       <table class="table table-bordered table-light table-hover table-striped">

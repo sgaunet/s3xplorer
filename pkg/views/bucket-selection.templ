@@ -1,0 +1,57 @@
+package views
+
+import (
+	"github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dto"
+	"time"
+	"fmt"
+)
+
+templ BucketSelection(buckets []dto.Bucket, currentBucket string, cfg config.Config) {
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>s3xplorer - Select Bucket</title>
+    <link rel="stylesheet" href="/static/pico.css" />
+  </head>
+  <body>
+    @MenuWithConfig(cfg)
+       
+    <div class="container-fluid">
+      <h2>Select a bucket to explore</h2>
+      if currentBucket != "" {
+        <div class="notice">
+          <p>Current bucket: <strong>{ currentBucket }</strong></p>
+        </div>
+      }
+      <table class="table table-bordered table-light table-hover table-striped">
+        <thead>
+          <tr>
+            <th>Bucket Name</th>
+            <th>Creation Date</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          for _, bucket := range buckets {
+            <tr>
+              <td>{ bucket.Name }</td>
+              <td>{ bucket.CreationDate.Format(time.RFC3339) }</td>
+              <td>
+                <a 
+                  href={ templ.URL(fmt.Sprintf("/?switchBucket=%s", bucket.Name)) } 
+                  role="button"
+                  class="outline"
+                >
+                  Select
+                </a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>
+}
