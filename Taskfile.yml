@@ -15,6 +15,11 @@ tasks:
       - go mod download
       - CGO_ENABLED=0 go build .
 
+  linter:
+    desc: "Run linter"
+    cmds:
+      - golangci-lint run
+
   minio:
     desc: "Launch minio server"
     dir: conf-examples
