@@ -1,3 +1,4 @@
+// Package app implements the web application's core functionality and HTTP request handlers.
 package app
 
 import (
@@ -7,7 +8,7 @@ import (
 	"github.com/sgaunet/s3xplorer/pkg/views"
 )
 
-// SearchHandler handles the search request
+// SearchHandler handles the search request.
 func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var searchFile string
@@ -22,10 +23,16 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	objects, err := s.s3svc.SearchObjects(r.Context(), s.cfg.Prefix, searchFile)
 	if err != nil {
-		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		s.log.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
+		if err := views.RenderError(err.Error()).Render(r.Context(), w); err != nil {
+			s.log.Error("Failed to render error page", slog.String("error", err.Error()))
+			http.Error(w, "Internal server error rendering error page", http.StatusInternalServerError)
+		}
 		return
 	}
 
-	views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w)
+	if err := views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w); err != nil {
+		s.log.Error("Failed to render search results", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error rendering search results", http.StatusInternalServerError)
+	}
 }

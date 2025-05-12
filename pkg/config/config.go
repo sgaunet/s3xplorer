@@ -1,13 +1,19 @@
+// Package config provides configuration management for the s3xplorer application
 package config
 
 import (
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
 
-// Config is the struct for the configuration
+// ErrIsDirectory is returned when a file operation is performed on a directory.
+var ErrIsDirectory = errors.New("expected file but got directory")
+
+// Config is the struct for the configuration.
 type Config struct {
 	S3endpoint         string `yaml:"s3endpoint"`
 	S3accessKey        string `yaml:"accesskey"`
@@ -21,20 +27,32 @@ type Config struct {
 	EnableGlacierRestore bool  `yaml:"enableglacierrestore"`
 }
 
-// ReadYamlCnxFile reads a yaml file and returns a Config struct
+// ReadYamlCnxFile reads a yaml file and returns a Config struct.
 func ReadYamlCnxFile(filename string) (Config, error) {
 	var config Config
 
-	yamlFile, err := ioutil.ReadFile(filename)
+	// Sanitize the path to prevent path traversal attacks
+	cleanPath := filepath.Clean(filename)
+	// Additional safety check - ensure the file exists and is a regular file
+	fileInfo, err := os.Stat(cleanPath)
+	if err != nil {
+		return config, fmt.Errorf("error accessing config file %s: %w", filename, err)
+	}
+
+	if fileInfo.IsDir() {
+		return config, fmt.Errorf("%w: %s", ErrIsDirectory, filename)
+	}
+
+	yamlFile, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fmt.Printf("Error reading YAML file: %s\n", err)
-		return config, err
+		return config, fmt.Errorf("error reading config file %s: %w", filename, err)
 	}
 
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
 		fmt.Printf("Error parsing YAML file: %s\n", err)
-		return config, err
+		return config, fmt.Errorf("error parsing config YAML: %w", err)
 	}
-	return config, err
+	return config, nil
 }
