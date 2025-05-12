@@ -11,10 +11,12 @@ import (
 	"github.com/sgaunet/s3xplorer/pkg/dto"
 )
 
-// GetObjects returns a list of objects in the parentFolder
-func (s *Service) GetObjects(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
-	var prefix string = parentFolder
-	var delimeter string = "/"
+// GetObjects returns a list of objects in the parentFolder.
+func (s *Service) GetObjects(ctx context.Context, parentFolder string) ([]dto.S3Object, error) {
+	// Initialize local result variable
+	result := []dto.S3Object{}
+	var prefix = parentFolder
+	var delimeter = "/"
 
 	paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(s.cfg.Bucket),
@@ -46,9 +48,11 @@ func (s *Service) GetObjects(ctx context.Context, parentFolder string) (result [
 	return result, nil
 }
 
-// SearchObjects returns a list of objects in the parentFolder that match the fileToSearch
-func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch string) (result []dto.S3Object, err error) {
-	var delimeter string = "/"
+// SearchObjects returns a list of objects in the parentFolder that match the fileToSearch.
+func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch string) ([]dto.S3Object, error) {
+	// Initialize local result variable
+	result := []dto.S3Object{}
+	var delimeter = "/"
 	s.log.Debug("SearchObjects", slog.String("prefix", prefix), slog.String("fileToSearch", fileToSearch))
 	if fileToSearch == "" {
 		return nil, nil

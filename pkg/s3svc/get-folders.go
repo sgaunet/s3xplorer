@@ -1,3 +1,4 @@
+// Package s3svc provides AWS S3 service operations and utilities
 package s3svc
 
 import (
@@ -12,9 +13,11 @@ import (
 	"github.com/sgaunet/s3xplorer/pkg/dto"
 )
 
-// GetFolders returns a list of folders in the parentFolder
-func (s *Service) GetFolders(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
-	var delimeter string = "/"
+// GetFolders returns a list of folders in the parentFolder.
+func (s *Service) GetFolders(ctx context.Context, parentFolder string) ([]dto.S3Object, error) {
+	var delimeter = "/"
+	// Initialize local result variable
+	result := []dto.S3Object{}
 
 	paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
 		Bucket:    aws.String(s.cfg.Bucket),
@@ -43,8 +46,8 @@ func (s *Service) GetFolders(ctx context.Context, parentFolder string) (result [
 	return result, nil
 }
 
-// GetAllFolders returns a list of all folders in the parentFolder and its subfolders
-func (s *Service) GetAllFolders(ctx context.Context, parentFolder string) (result []dto.S3Object, err error) {
+// GetAllFolders returns a list of all folders in the parentFolder and its subfolders.
+func (s *Service) GetAllFolders(ctx context.Context, parentFolder string) ([]dto.S3Object, error) {
 	folders, err := s.GetFolders(ctx, parentFolder)
 	if err != nil {
 		return nil, fmt.Errorf("GetAllFolders: error of GetFolders: %w", err)
@@ -53,6 +56,9 @@ func (s *Service) GetAllFolders(ctx context.Context, parentFolder string) (resul
 		s.log.Debug("GetAllFolders: no folders found")
 		return nil, nil
 	}
+
+	// Initialize local result variable
+	result := []dto.S3Object{}
 
 	for _, folder := range folders {
 		result = append(result, folder)

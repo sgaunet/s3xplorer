@@ -1,3 +1,5 @@
+// Package main is the entry point for the s3xplorer application, a web interface to browse S3 buckets
+// It handles connection to S3, configuration loading, and web server management
 package main
 
 import (
@@ -16,6 +18,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sgaunet/s3xplorer/pkg/app"
 	configapp "github.com/sgaunet/s3xplorer/pkg/config"
+)
+
+// Package-level error variables
+var (
+	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration
+	errNoAwsConfigMethod = errors.New("no method to initialize aws.Config")
 )
 
 func main() {
@@ -58,11 +66,16 @@ func main() {
 
 	<-ctx.Done()
 	l.Info("stop the server")
-	s.StopServer()
+	if err := s.StopServer(); err != nil {
+		l.Error("error stopping server", slog.String("error", err.Error()))
+	}
 }
 
+// SetupCloseHandler handles graceful shutdown on SIGTERM/SIGINT signals
 func SetupCloseHandler(ctx context.Context, cancelFunc context.CancelFunc, log *slog.Logger) {
-	c := make(chan os.Signal, 5)
+	// Define the buffer size for the signal channel
+	const signalChanBufferSize = 5
+	c := make(chan os.Signal, signalChanBufferSize)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		s := <-c
@@ -109,8 +122,11 @@ func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, 
 	return s3.NewFromConfig(cfg), nil
 }
 
-// GetAwsConfig returns an aws.Config
-func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (cfg aws.Config, err error) {
+// GetAwsConfig returns an aws.Config based on the provided configuration
+func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, error) {
+	// Initialize an empty config
+	var cfg aws.Config
+	
 	if cfgApp.S3endpoint != "" {
 		staticResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
 			return aws.Endpoint{
@@ -126,11 +142,11 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (cfg aws.Config,
 			Credentials:      credentials.NewStaticCredentialsProvider(cfgApp.S3ApikKey, cfgApp.S3accessKey, ""),
 			EndpointResolver: staticResolver,
 		}
-		return
+		return cfg, nil
 	}
 
 	if cfgApp.SsoAwsProfile != "" {
-		cfg, err = config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.SsoAwsProfile))
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.SsoAwsProfile))
 		if err != nil {
 			// s.log.Error("Error loading SSO profile", slog.String("error", err.Error()))
 			return cfg, fmt.Errorf("error loading SSO profile: %w", err)
@@ -139,14 +155,13 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (cfg aws.Config,
 		return cfg, nil
 	}
 
-	if cfgApp.S3ApikKey == "" && cfgApp.S3accessKey == "" {
-		cfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(cfgApp.S3Region))
+	if cfgApp.S3accessKey != "" && cfgApp.S3ApikKey != "" {
+		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
-			// s.log.Error("Error loading default config", slog.String("error", err.Error()))
 			return cfg, fmt.Errorf("error loading default config: %w", err)
 		}
 		// s.log.Debug("Default config loaded")
 		return cfg, nil
 	}
-	return cfg, errors.New("no method to initialize aws.Config")
+	return cfg, errNoAwsConfigMethod
 }

@@ -22,10 +22,10 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	objects, err := s.s3svc.SearchObjects(r.Context(), s.cfg.Prefix, searchFile)
 	if err != nil {
-		slog.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		s.log.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 
-	views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w)
+	views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w) //nolint:errcheck
 }

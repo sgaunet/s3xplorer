@@ -37,19 +37,20 @@ func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 	lstFolders, err := s.s3svc.GetFolders(r.Context(), f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 	objects, err := s.s3svc.GetObjects(r.Context(), f)
 	if err != nil {
 		slog.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 
-	views.RenderIndex(lstFolders, objects, f, s.cfg).Render(r.Context(), w)
+	views.RenderIndex(lstFolders, objects, f, s.cfg).Render(r.Context(), w) //nolint:errcheck
 }
 
+// DownloadFile handles the download request for a specific file from S3
 func (s *App) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	var err error
 	// vars := mux.Vars(request)
@@ -59,7 +60,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	keys, ok := r.URL.Query()["key"]
 	if !ok || len(keys[0]) < 1 {
 		s.log.Error("Url Param 'key' is missing")
-		views.RenderError("Url Param 'key' is missing").Render(r.Context(), w)
+		views.RenderError("Url Param 'key' is missing").Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 
@@ -70,7 +71,7 @@ func (s *App) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
 			s.log.Error("DownloadFile: Invalid key")
-			views.RenderError("Invalid key").Render(r.Context(), w)
+			views.RenderError("Invalid key").Render(r.Context(), w) //nolint:errcheck
 			return
 		}
 	}
@@ -82,17 +83,17 @@ func (s *App) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	o, err := s.awsS3Client.GetObject(r.Context(), &p)
 	if err != nil {
 		s.log.Error("DownloadFile: error when called GetObject", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
-	defer o.Body.Close()
+	defer o.Body.Close() //nolint:errcheck
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+key)
 	w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
 	_, err = io.Copy(w, o.Body)
 	if err != nil {
 		s.log.Error("DownloadFile: error when called Copy", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 }
@@ -122,7 +123,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Prefix != "" {
 		if !strings.HasPrefix(key, s.cfg.Prefix) {
 			s.log.Error("RestoreHandler: Invalid key")
-			views.RenderError("Invalid key").Render(r.Context(), w)
+			views.RenderError("Invalid key").Render(r.Context(), w) //nolint:errcheck
 			return
 		}
 	}
@@ -130,7 +131,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 	err = s.s3svc.RestoreObject(r.Context(), key)
 	if err != nil {
 		s.log.Error("RestoreHandler: error when called RestoreObject", slog.String("error", err.Error()))
-		views.RenderError(err.Error()).Render(r.Context(), w)
+		views.RenderError(err.Error()).Render(r.Context(), w) //nolint:errcheck
 		return
 	}
 	http.Redirect(w, r, "/?folder="+f, http.StatusTemporaryRedirect)

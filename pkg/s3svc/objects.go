@@ -3,6 +3,7 @@ package s3svc
 import (
 	"context"
 	"fmt"
+	"math"
 	"log/slog"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func (s *Service) IsDownloadable(ctx context.Context, key string) (isDownloadabl
 	if o.StorageClass == "" || o.StorageClass == "STANDARD" {
 		isDownloadable = true
 		isRestoring = false
-		return isDownloadable, isRestoring, err
+		return isDownloadable, isRestoring, nil
 	}
 
 	// If the object is in Glacier, we check if it is downloadable
@@ -47,7 +48,7 @@ func (s *Service) IsDownloadable(ctx context.Context, key string) (isDownloadabl
 			}
 			if vv == "\"true\"" {
 				isRestoring = true
-				return isDownloadable, isRestoring, err
+				return isDownloadable, isRestoring, nil
 			}
 		}
 		if vv, ok := res["expiry-date"]; ok {
@@ -59,26 +60,35 @@ func (s *Service) IsDownloadable(ctx context.Context, key string) (isDownloadabl
 			// Returns output
 			if time.Now().After(tm) {
 				isDownloadable = true
-				return isDownloadable, isRestoring, err
+				return isDownloadable, isRestoring, nil
 			}
 		}
 	}
-	return isDownloadable, isRestoring, err
+	return isDownloadable, isRestoring, nil
 }
 
 // RestoreObject restores an object
-func (s *Service) RestoreObject(ctx context.Context, key string) (err error) {
+func (s *Service) RestoreObject(ctx context.Context, key string) error {
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3@v1.26.0/types#RestoreRequest
 	tt := types.GlacierJobParameters{
 		Tier: "Standard",
 	}
 	
 	// Use configured RestoreDays if set, otherwise use the default
-	restoreDays := int32(s.cfg.RestoreDays)
-	if restoreDays <= 0 {
+	var restoreDays int32
+	// Check if the RestoreDays is within int32 bounds to prevent overflow
+	if s.cfg.RestoreDays <= 0 {
 		restoreDays = DefaultRetentionPolicyInDays
 		s.log.Debug("Using default restore days", slog.Int("days", int(DefaultRetentionPolicyInDays)))
+	} else if s.cfg.RestoreDays > int(math.MaxInt32) {
+		// If RestoreDays exceeds int32 max value, use the maximum value
+		restoreDays = math.MaxInt32
+		s.log.Warn("RestoreDays exceeds maximum allowed value, capping at maximum", 
+			slog.Int("requested", s.cfg.RestoreDays), 
+			slog.Int("maximum", int(math.MaxInt32)))
 	} else {
+		// Safe to convert
+		restoreDays = int32(s.cfg.RestoreDays)
 		s.log.Debug("Using configured restore days", slog.Int("days", s.cfg.RestoreDays))
 	}
 	
@@ -100,7 +110,7 @@ func (s *Service) RestoreObject(ctx context.Context, key string) (err error) {
 		return fmt.Errorf("RestoreObject: error when called RestoreObject: %w", err)
 	}
 	s.log.Debug("RestoreObject", slog.String("key", key), slog.String("output", fmt.Sprintf("%+v", o)))
-	return
+	return nil
 }
 
 // conv converts a string to a map
