@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,9 +21,9 @@ import (
 	configapp "github.com/sgaunet/s3xplorer/pkg/config"
 )
 
-// Package-level error variables
+// Package-level error variables.
 var (
-	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration
+	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration.
 	errNoAwsConfigMethod = errors.New("no method to initialize aws.Config")
 )
 
@@ -71,8 +72,8 @@ func main() {
 	}
 }
 
-// SetupCloseHandler handles graceful shutdown on SIGTERM/SIGINT signals
-func SetupCloseHandler(ctx context.Context, cancelFunc context.CancelFunc, log *slog.Logger) {
+// SetupCloseHandler handles graceful shutdown on SIGTERM/SIGINT signals.
+func SetupCloseHandler(_ context.Context, cancelFunc context.CancelFunc, log *slog.Logger) {
 	// Define the buffer size for the signal channel
 	const signalChanBufferSize = 5
 	c := make(chan os.Signal, signalChanBufferSize)
@@ -84,7 +85,7 @@ func SetupCloseHandler(ctx context.Context, cancelFunc context.CancelFunc, log *
 	}()
 }
 
-// initTrace initializes the logger
+// initTrace initializes the logger.
 func initTrace(debugLevel string) *slog.Logger {
 	handlerOptions := &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -111,37 +112,67 @@ func initTrace(debugLevel string) *slog.Logger {
 	return logger
 }
 
-// initS3Client initializes the S3 client
+// initS3Client initializes the S3 client.
 func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, error) {
 	var cfg aws.Config
 	cfg, err := GetAwsConfig(ctx, configApp)
 	if err != nil {
 		return nil, fmt.Errorf("error getting AWS config: %w", err)
 	}
-	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3
+
+	// Apply additional S3-specific options if using a custom endpoint
+	if configApp.S3endpoint != "" {
+		// Use functional options pattern to configure the S3 client
+		return s3.NewFromConfig(cfg, func(o *s3.Options) {
+			// Set the custom endpoint URL
+			o.BaseEndpoint = aws.String(configApp.S3endpoint)
+			// Use path-style addressing (bucket name in the URL path)
+			o.UsePathStyle = true
+		}), nil
+	}
+
+	// Standard AWS S3 client configuration
 	return s3.NewFromConfig(cfg), nil
 }
 
-// GetAwsConfig returns an aws.Config based on the provided configuration
+// GetAwsConfig returns an aws.Config based on the provided configuration.
 func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, error) {
 	// Initialize an empty config
 	var cfg aws.Config
-	
-	if cfgApp.S3endpoint != "" {
-		staticResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				PartitionID:       "aws",
-				URL:               cfgApp.S3endpoint, // or where ever you ran minio
-				SigningRegion:     cfgApp.S3Region,
-				HostnameImmutable: true,
-			}, nil
-		})
 
-		cfg = aws.Config{
-			Region:           cfgApp.S3Region,
-			Credentials:      credentials.NewStaticCredentialsProvider(cfgApp.S3ApikKey, cfgApp.S3accessKey, ""),
-			EndpointResolver: staticResolver,
+	if cfgApp.S3endpoint != "" {
+		// Parse the endpoint URL for validation
+		_, err := url.Parse(cfgApp.S3endpoint)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("invalid S3 endpoint URL: %w", err)
 		}
+
+		// Load basic configuration with region & credentials
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithRegion(cfgApp.S3Region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				cfgApp.S3accessKey,
+				cfgApp.S3ApikKey,
+				"",
+			)),
+		)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("error loading AWS config: %w", err)
+		}
+
+		// When we create the S3 client from this config, we'll modify it with custom endpoint
+		// This is handled in the NewApp > initS3Client function, which calls:
+		// s3.NewFromConfig(cfg) which gets this config
+		// The s3.NewFromConfig will apply the custom endpoint when creating the client
+		
+		// Note: We're intentionally not using the deprecated endpoint resolvers here
+		// When we create the S3 client, we'll use:
+		// s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		//   o.BaseEndpoint = aws.String(cfgApp.S3endpoint)
+		//   o.UsePathStyle = true
+		// })
+		// This happens in the initS3Client function
+
 		return cfg, nil
 	}
 

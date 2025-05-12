@@ -2,11 +2,16 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
+
+// ErrIsDirectory is returned when a file operation is performed on a directory.
+var ErrIsDirectory = errors.New("expected file but got directory")
 
 // Config is the struct for the configuration.
 type Config struct {
@@ -26,7 +31,19 @@ type Config struct {
 func ReadYamlCnxFile(filename string) (Config, error) {
 	var config Config
 
-	yamlFile, err := os.ReadFile(filename)
+	// Sanitize the path to prevent path traversal attacks
+	cleanPath := filepath.Clean(filename)
+	// Additional safety check - ensure the file exists and is a regular file
+	fileInfo, err := os.Stat(cleanPath)
+	if err != nil {
+		return config, fmt.Errorf("error accessing config file %s: %w", filename, err)
+	}
+
+	if fileInfo.IsDir() {
+		return config, fmt.Errorf("%w: %s", ErrIsDirectory, filename)
+	}
+
+	yamlFile, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fmt.Printf("Error reading YAML file: %s\n", err)
 		return config, fmt.Errorf("error reading config file %s: %w", filename, err)

@@ -14,7 +14,7 @@ import (
 	"github.com/sgaunet/s3xplorer/pkg/s3svc"
 )
 
-// App is the main structure of the application
+// App is the main structure of the application.
 type App struct {
 	cfg         config.Config
 	awsS3Client *s3.Client
@@ -24,7 +24,7 @@ type App struct {
 	log         *slog.Logger
 }
 
-// emptyLogger returns a logger that discards all log entries
+// emptyLogger returns a logger that discards all log entries.
 func emptyLogger() *slog.Logger {
 	// Use DiscardHandler to create a logger that doesn't output anything
 	return slog.New(slog.DiscardHandler)
@@ -32,15 +32,23 @@ func emptyLogger() *slog.Logger {
 
 // NewApp creates a new App
 // NewApp initializes the S3 client and launch the web server in a goroutine
-// By default the logger is set to write to /dev/null
+// By default the logger is set to write to /dev/null.
 func NewApp(cfg config.Config, s3Client *s3.Client) *App {
+	// Define constants for server configuration
+	const (
+		// DefaultReadHeaderTimeoutSeconds is the default timeout for reading request headers to mitigate Slowloris attacks
+		DefaultReadHeaderTimeoutSeconds = 5
+	)
+
 	s := &App{
 		cfg:         cfg,
 		awsS3Client: s3Client,
 		router:      mux.NewRouter().StrictSlash(true),
 		log:         emptyLogger(),
-		srv:         &http.Server{},
-		s3svc:       s3svc.NewS3Svc(cfg, s3Client),
+		srv: &http.Server{
+			ReadHeaderTimeout: DefaultReadHeaderTimeoutSeconds * time.Second, // Mitigate Slowloris attacks
+		},
+		s3svc: s3svc.NewS3Svc(cfg, s3Client),
 	}
 
 	s.initRouter()
@@ -56,13 +64,13 @@ func NewApp(cfg config.Config, s3Client *s3.Client) *App {
 	return s
 }
 
-// SetLogger sets the logger of the App
+// SetLogger sets the logger of the App.
 func (s *App) SetLogger(l *slog.Logger) {
 	s.log = l
 	s.s3svc.SetLogger(l)
 }
 
-// StopServer stops the web server
+// StopServer stops the web server.
 func (s *App) StopServer() error {
 	if err := s.srv.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("error stopping server: %w", err)
@@ -70,13 +78,13 @@ func (s *App) StopServer() error {
 	return nil
 }
 
-// Router returns the router of the App
-func (s App) Router() http.Handler {
+// Router returns the router of the App.
+func (s *App) Router() http.Handler {
 	return s.router
 }
 
-// startWebServer starts the web server
-// Default port is 8081
+// startWebServer starts the web server.
+// Default port is 8081.
 func (s *App) startWebServer() error {
 	// Define constants for server configuration
 	const (

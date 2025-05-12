@@ -13,7 +13,7 @@ var staticCSS embed.FS
 //go:embed static/file-heart.png
 var faviconFS []byte
 
-// StaticHandler serves static files for the web interface
+// StaticHandler serves static files for the web interface.
 var StaticHandler http.Handler
 
 func init() {
