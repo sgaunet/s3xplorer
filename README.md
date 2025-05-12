@@ -4,6 +4,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sgaunet/s3xplorer)](https://goreportcard.com/report/github.com/sgaunet/s3xplorer)
 ![GitHub Downloads](https://img.shields.io/github/downloads/sgaunet/s3xplorer/total)
 ![Coverage](https://raw.githubusercontent.com/wiki/sgaunet/s3xplorer/coverage-badge.svg)
+[![coverage](https://github.com/sgaunet/s3xplorer/actions/workflows/coverage.yml/badge.svg)](https://github.com/sgaunet/s3xplorer/actions/workflows/coverage.yml)
+[![Snapshot Build](https://github.com/sgaunet/s3xplorer/actions/workflows/snapshot.yml/badge.svg)](https://github.com/sgaunet/s3xplorer/actions/workflows/snapshot.yml)
+[![Release Build](https://github.com/sgaunet/s3xplorer/actions/workflows/release.yml/badge.svg)](https://github.com/sgaunet/s3xplorer/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/sgaunet/s3xplorer.svg)](LICENSE)
 
 s3xplorer is a web interface to parse a S3 bucket.
