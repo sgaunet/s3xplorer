@@ -13,3 +13,9 @@ type S3Object struct {
 	IsDownloadable bool
 	IsRestoring    bool
 }
+
+// Bucket represents an S3 bucket.
+type Bucket struct {
+	Name         string    `json:"name"`
+	CreationDate time.Time `json:"creationDate"`
+}

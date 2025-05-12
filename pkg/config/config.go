@@ -25,6 +25,8 @@ type Config struct {
 	LogLevel           string `yaml:"loglevel"`
 	RestoreDays        int    `yaml:"restoredays"`
 	EnableGlacierRestore bool  `yaml:"enableglacierrestore"`
+	// Not serialized, but used to track whether bucket was explicitly set in config
+	BucketLocked       bool   `yaml:"-"`
 }
 
 // ReadYamlCnxFile reads a yaml file and returns a Config struct.
@@ -48,11 +50,15 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 		fmt.Printf("Error reading YAML file: %s\n", err)
 		return config, fmt.Errorf("error reading config file %s: %w", filename, err)
 	}
-
+	
+	// Parse YAML into config structure
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		fmt.Printf("Error parsing YAML file: %s\n", err)
-		return config, fmt.Errorf("error parsing config YAML: %w", err)
+		return config, fmt.Errorf("error parsing YAML from %s: %w", filename, err)
 	}
+	
+	// Set BucketLocked flag if bucket is explicitly specified in config
+	config.BucketLocked = config.Bucket != ""
+
 	return config, nil
 }

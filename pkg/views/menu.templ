@@ -1,5 +1,6 @@
 package views
 
+import "github.com/sgaunet/s3xplorer/pkg/config"
 
 templ Menu() {
   <div class="container-fluid" styles="margin:1 px;">
@@ -10,7 +11,25 @@ templ Menu() {
       <ul>
         <li><a href="/">index</a></li>
         <li><a href="/search">search</a></li>
-        <!-- <li><a href="#" role="button">Button</a></li> -->
+        <li><a href="/buckets">change bucket</a></li>
+      </ul>
+    </nav>
+  </div>
+}
+
+// MenuWithConfig is a menu template that shows or hides the bucket link based on config
+templ MenuWithConfig(cfg config.Config) {
+  <div class="container-fluid" styles="margin:1 px;">
+    <nav styles="margin:1 px;">
+      <ul>
+        <li><strong>s3xplorer</strong></li>
+      </ul>
+      <ul>
+        <li><a href="/">index</a></li>
+        <li><a href="/search">search</a></li>
+        if !cfg.BucketLocked {
+          <li><a href="/buckets">change bucket</a></li>
+        }
       </ul>
     </nav>
   </div>

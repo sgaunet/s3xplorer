@@ -20,53 +20,147 @@ var (
 
 	// ErrInvalidKey is returned when a key does not match the required prefix.
 	ErrInvalidKey = errors.New("invalid key prefix")
+
+	// ErrBucketLocked is returned when bucket changes are not permitted.
+	ErrBucketLocked = errors.New("bucket changes are not permitted when a bucket is explicitly defined in configuration")
 )
 
 // IndexBucket handles the index request.
-func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
-	var err error
-	var f string
-	// vars := mux.Vars(request)
-	// bucket := vars["bucket"]
+// handleBucketSwitch processes bucket switching requests and redirects appropriately.
+func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *http.Request) (bool, error) {
+	switchBucket, hasSwitchParam := r.URL.Query()["switchBucket"]
+	if !hasSwitchParam || len(switchBucket[0]) < 1 {
+		return false, nil // No bucket switch requested
+	}
 
+	// Check if bucket switching is allowed
+	if s.cfg.BucketLocked {
+		// If bucket is locked (specified in config), don't allow changes
+		s.log.Warn("Attempted to switch buckets when bucket is locked in config",
+			slog.String("current", s.cfg.Bucket),
+			slog.String("requested", switchBucket[0]))
+
+		// Render an error page explaining that bucket is locked
+		return true, ErrBucketLocked
+	}
+
+	// Bucket switching is allowed, proceed with the change
+	newBucket := switchBucket[0]
+	s.log.Info("Switching bucket", slog.String("to", newBucket))
+
+	// Update the bucket in the s3svc service
+	s.s3svc.SwitchBucket(newBucket)
+
+	// Also update the bucket in the App's config to ensure consistency
+	s.cfg.Bucket = newBucket
+	s.cfg.Prefix = ""
+
+	// Redirect to the root of the new bucket
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+	return true, nil // Handled bucket switch
+}
+
+// checkEmptyBucket checks if the bucket is empty or needs redirection.
+func (s *App) checkEmptyBucket(ctx context.Context, w http.ResponseWriter, r *http.Request) bool {
+	// Check if the bucket is empty, if so redirect to bucket selection
+	if s.cfg.Bucket == "" {
+		s.log.Info("No bucket configured, redirecting to bucket selection")
+		http.Redirect(w, r, "/buckets", http.StatusSeeOther)
+		return true // Handled with redirect
+	}
+
+	// Only check if bucket is empty when not using a prefix filter
+	if s.cfg.Prefix == "" {
+		isEmpty, err := s.s3svc.IsBucketEmpty(ctx)
+		if err != nil {
+			s.log.Error("Error checking if bucket is empty", slog.String("error", err.Error()))
+			// Continue anyway, we'll show errors on the main page
+			return false
+		}
+
+		if isEmpty {
+			s.log.Info("Bucket is empty, redirecting to bucket selection",
+				slog.String("bucket", s.cfg.Bucket))
+			http.Redirect(w, r, "/buckets", http.StatusSeeOther)
+			return true // Handled with redirect
+		}
+	}
+
+	return false // No redirect needed
+}
+
+// getAndValidateFolder extracts and validates the folder parameter from the request.
+func (s *App) getAndValidateFolder(r *http.Request) string {
+	// Start with the configured prefix as default
+	folderPath := s.cfg.Prefix
+
+	// Check if a folder parameter was provided
 	folder, ok := r.URL.Query()["folder"]
-	if !ok || len(folder[0]) < 1 {
-		f = s.cfg.Prefix
-	} else {
-		// Query()["key"] will return an array of items,
-		// we only want the single item.
-		f = folder[0]
-		// Check that the folder begins with s.cfg.Prefix if s.cfg.Prefix is not empty
-		if s.cfg.Prefix != "" {
-			if !strings.HasPrefix(f, s.cfg.Prefix) {
-				f = s.cfg.Prefix
-			}
-		}
-	}
-	s.log.Debug("IndexBucket", slog.String("f", f))
+	if ok && len(folder[0]) > 0 {
+		folderPath = folder[0]
 
-	lstFolders, err := s.s3svc.GetFolders(r.Context(), f)
-	if err != nil {
-		s.log.Error("IndexBucket: error when called GetFolders", slog.String("error", err.Error()))
-		if renderErr := views.RenderError(err.Error()).Render(r.Context(), w); renderErr != nil {
-			s.log.Error("Failed to render error page", slog.String("error", renderErr.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		// Ensure folder respects prefix restrictions if a prefix is set
+		if s.cfg.Prefix != "" && !strings.HasPrefix(folderPath, s.cfg.Prefix) {
+			folderPath = s.cfg.Prefix // Reset to prefix if validation fails
 		}
-		return
-	}
-	objects, err := s.s3svc.GetObjects(r.Context(), f)
-	if err != nil {
-		s.log.Error("IndexBucket: error when called GetObjects", slog.String("error", err.Error()))
-		if renderErr := views.RenderError(err.Error()).Render(r.Context(), w); renderErr != nil {
-			s.log.Error("Failed to render error page", slog.String("error", renderErr.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
-		return
 	}
 
-	if err := views.RenderIndex(lstFolders, objects, f, s.cfg).Render(r.Context(), w); err != nil {
+	s.log.Debug("Using folder path", slog.String("path", folderPath))
+	return folderPath
+}
+
+// loadAndRenderBucketContents fetches and renders the bucket contents.
+func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
+	// Get folders in the current path
+	lstFolders, err := s.s3svc.GetFolders(ctx, folderPath)
+	if err != nil {
+		s.log.Error("Error getting folders", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to get folder list: %w", err)
+	}
+
+	// Get objects in the current path
+	objects, err := s.s3svc.GetObjects(ctx, folderPath)
+	if err != nil {
+		s.log.Error("Error getting objects", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to get object list: %w", err)
+	}
+
+	// Render the index page with folders and objects
+	if err := views.RenderIndex(lstFolders, objects, folderPath, s.cfg).Render(ctx, w); err != nil {
 		s.log.Error("Failed to render index page", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error rendering index page", http.StatusInternalServerError)
+		return fmt.Errorf("error rendering index page: %w", err)
+	}
+
+	return nil
+}
+
+// IndexBucket handles the index request with reduced complexity.
+func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Check if we're trying to switch buckets
+	handled, err := s.handleBucketSwitch(ctx, w, r)
+	if err != nil {
+		s.renderErrorPage(ctx, w, err.Error())
+		return
+	}
+	if handled {
+		return // Request was handled by bucket switch logic
+	}
+
+	// Check if we need to redirect for empty bucket
+	redirected := s.checkEmptyBucket(ctx, w, r)
+	if redirected {
+		return // Request was redirected
+	}
+
+	// Get and validate folder path
+	folderPath := s.getAndValidateFolder(r)
+
+	// Load and render bucket contents
+	err = s.loadAndRenderBucketContents(ctx, w, folderPath)
+	if err != nil {
+		s.renderErrorPage(ctx, w, err.Error())
 	}
 }
 
