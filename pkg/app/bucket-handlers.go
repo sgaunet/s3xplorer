@@ -18,7 +18,9 @@ func (s *App) BucketListingHandler(w http.ResponseWriter, r *http.Request) {
 			slog.String("current", s.cfg.Bucket))
 		
 		// Render an error page explaining that bucket is locked
-		s.renderErrorPage(ctx, w, "Bucket changes are not permitted when a bucket is explicitly defined in configuration. Please update your configuration file if you need to access a different bucket.")
+		errMsg := "Bucket changes are not permitted when a bucket is explicitly defined in configuration. " +
+			"Please update your configuration file if you need to access a different bucket."
+		s.renderErrorPage(ctx, w, errMsg)
 		return
 	}
 	
