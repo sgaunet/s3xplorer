@@ -24,8 +24,8 @@ func (s *App) BucketListingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Get list of available buckets
-	buckets, err := s.s3svc.ListBuckets(ctx)
+	// Get list of available buckets from PostgreSQL database
+	buckets, err := s.dbsvc.GetBuckets(ctx)
 	if err != nil {
 		s.log.Error("Error listing buckets", slog.String("error", err.Error()))
 		s.renderErrorPage(ctx, w, "Failed to retrieve bucket list: "+err.Error())

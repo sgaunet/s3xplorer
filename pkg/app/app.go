@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dbsvc"
 	"github.com/sgaunet/s3xplorer/pkg/s3svc"
 )
 
@@ -19,6 +20,7 @@ type App struct {
 	cfg         config.Config
 	awsS3Client *s3.Client
 	s3svc       *s3svc.Service
+	dbsvc       *dbsvc.Service
 	router      *mux.Router
 	srv         *http.Server
 	log         *slog.Logger
@@ -33,7 +35,7 @@ func emptyLogger() *slog.Logger {
 // NewApp creates a new App
 // NewApp initializes the S3 client and launch the web server in a goroutine
 // By default the logger is set to write to /dev/null.
-func NewApp(cfg config.Config, s3Client *s3.Client) *App {
+func NewApp(cfg config.Config, s3Client *s3.Client, dbService *dbsvc.Service) *App {
 	// Define constants for server configuration
 	const (
 		// DefaultReadHeaderTimeoutSeconds is the default timeout for reading request headers to mitigate Slowloris attacks
@@ -49,6 +51,7 @@ func NewApp(cfg config.Config, s3Client *s3.Client) *App {
 			ReadHeaderTimeout: DefaultReadHeaderTimeoutSeconds * time.Second, // Mitigate Slowloris attacks
 		},
 		s3svc: s3svc.NewS3Svc(cfg, s3Client),
+		dbsvc: dbService,
 	}
 
 	s.initRouter()
@@ -68,6 +71,7 @@ func NewApp(cfg config.Config, s3Client *s3.Client) *App {
 func (s *App) SetLogger(l *slog.Logger) {
 	s.log = l
 	s.s3svc.SetLogger(l)
+	s.dbsvc.SetLogger(l)
 }
 
 // StopServer stops the web server.

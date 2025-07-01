@@ -21,7 +21,8 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Debug("SearchHandler", slog.String("searchFile", searchFile))
 
-	objects, err := s.s3svc.SearchObjects(r.Context(), s.cfg.Prefix, searchFile)
+	// Use PostgreSQL database service for search instead of direct S3 calls
+	objects, err := s.dbsvc.SearchObjects(r.Context(), s.cfg.Bucket, searchFile, 1000, 0)
 	if err != nil {
 		s.log.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
 		if err := views.RenderError(err.Error()).Render(r.Context(), w); err != nil {

@@ -25,6 +25,13 @@ type Config struct {
 	LogLevel           string `yaml:"loglevel"`
 	RestoreDays        int    `yaml:"restoredays"`
 	EnableGlacierRestore bool  `yaml:"enableglacierrestore"`
+	// Database configuration
+	DatabaseURL        string `yaml:"database_url"`
+	// Background job configuration
+	ScanCronSchedule   string `yaml:"scan_cron_schedule"`
+	EnableBackgroundScan bool `yaml:"enable_background_scan"`
+	// Initial scan configuration
+	EnableInitialScan  bool   `yaml:"enable_initial_scan"`
 	// Not serialized, but used to track whether bucket was explicitly set in config
 	BucketLocked       bool   `yaml:"-"`
 }
@@ -59,6 +66,15 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 	
 	// Set BucketLocked flag if bucket is explicitly specified in config
 	config.BucketLocked = config.Bucket != ""
+	
+	// Set default values for new fields
+	if config.ScanCronSchedule == "" {
+		config.ScanCronSchedule = "0 0 2 * * *" // Daily at 2 AM (with seconds field)
+	}
+	if config.DatabaseURL == "" {
+		config.DatabaseURL = "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
+	}
+	// EnableInitialScan defaults to false for safety
 
 	return config, nil
 }

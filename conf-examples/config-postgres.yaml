@@ -1,0 +1,28 @@
+# Example configuration with PostgreSQL backend and background scanning
+
+# S3 Configuration
+s3endpoint: http://127.0.0.1:9090
+s3region: "us-east-1"
+accesskey: minioadminn
+apikey: minioadminn
+awsssoprofile: 
+bucket: example
+# set the prefix if you want to restrict the access to a specific folder
+# don't forget to add the trailing slash at the end
+prefix: rando/
+
+# Database Configuration
+database_url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
+
+# Background Scanning Configuration
+enable_background_scan: true
+# Cron schedule for scanning (default: "0 2 * * *" - daily at 2 AM)
+# Format: second minute hour day month weekday
+# Examples:
+# "0 2 * * *"     - daily at 2 AM
+# "0 */6 * * *"   - every 6 hours
+# "0 0 * * 0"     - weekly on Sunday at midnight
+scan_cron_schedule: "0 2 * * *"
+
+# Logging
+loglevel: info

@@ -1,4 +1,5 @@
 data
+postgres_data
 s3xplorer
 .task
 dist

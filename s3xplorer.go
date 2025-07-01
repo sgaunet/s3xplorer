@@ -17,8 +17,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	_ "github.com/lib/pq"
 	"github.com/sgaunet/s3xplorer/pkg/app"
 	configapp "github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dbinit"
+	"github.com/sgaunet/s3xplorer/pkg/dbsvc"
+	"github.com/sgaunet/s3xplorer/pkg/scanner"
+	"github.com/sgaunet/s3xplorer/pkg/scheduler"
 )
 
 // Package-level error variables.
@@ -61,12 +66,49 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize database with embedded migrations
+	dbConn, err := dbinit.InitializeDatabase(cfg.DatabaseURL, l)
+	if err != nil {
+		l.Error("error initializing database", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer dbConn.Close()
+
+	// Create services
+	dbService := dbsvc.NewService(cfg, dbConn)
+	dbService.SetLogger(l)
+
+	scannerService := scanner.NewService(cfg, s3Client, dbConn)
+	scannerService.SetLogger(l)
+
+	// Create scheduler
+	scheduler := scheduler.NewScheduler(cfg, dbConn, scannerService)
+	scheduler.SetLogger(l)
+
+	// Perform initial scan if enabled
+	if cfg.EnableInitialScan {
+		l.Info("Performing initial bucket scan")
+		if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
+			l.Error("error during initial scan", slog.String("error", err.Error()))
+			// Don't exit - continue with application startup even if initial scan fails
+		} else {
+			l.Info("Initial bucket scan completed successfully")
+		}
+	}
+
+	// Start scheduler
+	if err := scheduler.Start(ctx); err != nil {
+		l.Error("error starting scheduler", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
 	// Create the app
-	s := app.NewApp(cfg, s3Client)
+	s := app.NewApp(cfg, s3Client, dbService)
 	s.SetLogger(l)
 
 	<-ctx.Done()
 	l.Info("stop the server")
+	scheduler.Stop()
 	if err := s.StopServer(); err != nil {
 		l.Error("error stopping server", slog.String("error", err.Error()))
 	}

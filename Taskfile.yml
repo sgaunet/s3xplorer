@@ -13,6 +13,7 @@ tasks:
     desc: "Build the binary"
     cmds:
       - go mod download
+      - task: sqlc
       - CGO_ENABLED=0 go build .
 
   linter:
@@ -20,6 +21,11 @@ tasks:
     cmds:
       - go generate ./...
       - golangci-lint run
+
+  sqlc:
+    desc: "Generate database code with sqlc"
+    cmds:
+      - sqlc generate
 
   minio:
     desc: "Launch minio server"
@@ -33,6 +39,24 @@ tasks:
     - minio
     cmds:
       - go run . -f conf-examples/config-minio.yaml
+
+  run-postgres:
+    desc: "Run the binary with PostgreSQL backend and minio server"
+    deps:
+    - postgres-stack
+    - db-migrate
+    cmds:
+      - go run . -f conf-examples/config-postgres.yaml
+
+  postgres-stack:
+    desc: "Start PostgreSQL and MinIO with Docker Compose"
+    cmds:
+      - docker compose -f docker-compose.postgres.yml up -d
+
+  postgres-stack-down:
+    desc: "Stop PostgreSQL and MinIO stack"
+    cmds:
+      - docker compose -f docker-compose.postgres.yml down
 
   image:
     desc: "Build/push the docker image version latest"

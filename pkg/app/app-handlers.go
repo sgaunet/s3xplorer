@@ -71,14 +71,14 @@ func (s *App) checkEmptyBucket(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// Only check if bucket is empty when not using a prefix filter
 	if s.cfg.Prefix == "" {
-		isEmpty, err := s.s3svc.IsBucketEmpty(ctx)
+		count, err := s.dbsvc.CountObjects(ctx, s.cfg.Bucket, s.cfg.Prefix)
 		if err != nil {
 			s.log.Error("Error checking if bucket is empty", slog.String("error", err.Error()))
 			// Continue anyway, we'll show errors on the main page
 			return false
 		}
 
-		if isEmpty {
+		if count == 0 {
 			s.log.Info("Bucket is empty, redirecting to bucket selection",
 				slog.String("bucket", s.cfg.Bucket))
 			http.Redirect(w, r, "/buckets", http.StatusSeeOther)
@@ -111,15 +111,15 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 
 // loadAndRenderBucketContents fetches and renders the bucket contents.
 func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
-	// Get folders in the current path
-	lstFolders, err := s.s3svc.GetFolders(ctx, folderPath)
+	// Get folders in the current path from PostgreSQL database
+	lstFolders, err := s.dbsvc.GetFolders(ctx, s.cfg.Bucket, folderPath, 1000, 0)
 	if err != nil {
 		s.log.Error("Error getting folders", slog.String("error", err.Error()))
 		return fmt.Errorf("failed to get folder list: %w", err)
 	}
 
-	// Get objects in the current path
-	objects, err := s.s3svc.GetObjects(ctx, folderPath)
+	// Get objects in the current path from PostgreSQL database
+	objects, err := s.dbsvc.GetObjects(ctx, s.cfg.Bucket, folderPath, 1000, 0)
 	if err != nil {
 		s.log.Error("Error getting objects", slog.String("error", err.Error()))
 		return fmt.Errorf("failed to get object list: %w", err)
