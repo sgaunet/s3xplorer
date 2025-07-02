@@ -82,3 +82,43 @@ WHERE bucket_id = $1
   AND key != $2
 ORDER BY is_folder DESC, key ASC
 LIMIT $3 OFFSET $4;
+
+-- name: GetDirectChildren :many
+-- Get only immediate children (files and folders) under a specific prefix
+-- For hierarchical navigation - not recursive
+SELECT * FROM s3_objects
+WHERE bucket_id = $1 
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND key != $2
+  AND (
+    -- Direct files: files whose prefix exactly matches the given prefix
+    (is_folder = false)
+    OR 
+    -- Direct folders: folders whose prefix exactly matches the given prefix
+    (is_folder = true)
+  )
+ORDER BY is_folder DESC, key ASC
+LIMIT $3 OFFSET $4;
+
+-- name: GetParentFolder :one
+-- Get parent folder information for breadcrumb navigation
+SELECT * FROM s3_objects
+WHERE bucket_id = $1 
+  AND key = $2
+  AND is_folder = true
+LIMIT 1;
+
+-- name: GetBreadcrumbPath :many
+-- Get all parent folders for breadcrumb navigation
+SELECT * FROM s3_objects
+WHERE bucket_id = $1 
+  AND is_folder = true
+  AND $2 LIKE key || '%'
+  AND key != $2
+ORDER BY LENGTH(key) ASC;

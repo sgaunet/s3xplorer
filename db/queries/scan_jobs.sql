@@ -21,9 +21,16 @@ RETURNING *;
 
 -- name: UpdateScanJobStatus :one
 UPDATE scan_jobs
-SET status = $2,
-    started_at = CASE WHEN $2 = 'running' THEN NOW() ELSE started_at END,
-    completed_at = CASE WHEN $2 IN ('completed', 'failed') THEN NOW() ELSE completed_at END,
+SET status = $2::text,
+    started_at = CASE 
+        WHEN $2::text = 'running' THEN NOW() 
+        ELSE started_at 
+    END,
+    completed_at = CASE 
+        WHEN $2::text = 'completed' THEN NOW()
+        WHEN $2::text = 'failed' THEN NOW()
+        ELSE completed_at 
+    END,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;

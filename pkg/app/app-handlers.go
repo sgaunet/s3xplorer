@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/sgaunet/s3xplorer/pkg/dto"
 	"github.com/sgaunet/s3xplorer/pkg/views"
 )
 
@@ -109,24 +110,30 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 	return folderPath
 }
 
-// loadAndRenderBucketContents fetches and renders the bucket contents.
+// loadAndRenderBucketContents fetches and renders the bucket contents using hierarchical navigation.
 func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
-	// Get folders in the current path from PostgreSQL database
-	lstFolders, err := s.dbsvc.GetFolders(ctx, s.cfg.Bucket, folderPath, 1000, 0)
+	// Get direct children (immediate subfolders and files) using hierarchical navigation
+	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.Bucket, folderPath, 1000, 0)
 	if err != nil {
-		s.log.Error("Error getting folders", slog.String("error", err.Error()))
-		return fmt.Errorf("failed to get folder list: %w", err)
+		s.log.Error("Error getting direct children", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to get direct children: %w", err)
 	}
 
-	// Get objects in the current path from PostgreSQL database
-	objects, err := s.dbsvc.GetObjects(ctx, s.cfg.Bucket, folderPath, 1000, 0)
-	if err != nil {
-		s.log.Error("Error getting objects", slog.String("error", err.Error()))
-		return fmt.Errorf("failed to get object list: %w", err)
+	// Separate folders and files for proper ordering
+	var folders, files []dto.S3Object
+	for _, obj := range objects {
+		if obj.IsFolder {
+			folders = append(folders, obj)
+		} else {
+			files = append(files, obj)
+		}
 	}
 
-	// Render the index page with folders and objects
-	if err := views.RenderIndex(lstFolders, objects, folderPath, s.cfg).Render(ctx, w); err != nil {
+	// Build breadcrumb navigation
+	breadcrumbs := s.dbsvc.BuildBreadcrumbs(folderPath)
+
+	// Render the index page with hierarchical navigation
+	if err := views.RenderIndexHierarchical(folders, files, folderPath, breadcrumbs, s.cfg).Render(ctx, w); err != nil {
 		s.log.Error("Failed to render index page", slog.String("error", err.Error()))
 		return fmt.Errorf("error rendering index page: %w", err)
 	}

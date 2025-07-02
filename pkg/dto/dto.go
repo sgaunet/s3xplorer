@@ -24,3 +24,9 @@ type Bucket struct {
 	Region       string    `json:"region"`
 	CreationDate time.Time `json:"creationDate"`
 }
+
+// Breadcrumb represents a navigation breadcrumb
+type Breadcrumb struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}

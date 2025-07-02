@@ -3,6 +3,7 @@ package dbsvc
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -169,14 +170,125 @@ func (s *Service) convertToDTO(objects []database.S3Object) []dto.S3Object {
 		// Format size for display
 		result[i].SizeHuman = s.formatSize(obj.Size)
 		
-		// Extract filename from key
-		if idx := strings.LastIndex(obj.Key, "/"); idx != -1 {
-			result[i].Name = obj.Key[idx+1:]
+		// Extract filename/folder name from key
+		if obj.IsFolder.Bool {
+			// For folders, remove trailing slash and get the last part
+			folderKey := strings.TrimSuffix(obj.Key, "/")
+			if idx := strings.LastIndex(folderKey, "/"); idx != -1 {
+				result[i].Name = folderKey[idx+1:]
+			} else {
+				result[i].Name = folderKey
+			}
 		} else {
-			result[i].Name = obj.Key
+			// For files, get the last part after the slash
+			if idx := strings.LastIndex(obj.Key, "/"); idx != -1 {
+				result[i].Name = obj.Key[idx+1:]
+			} else {
+				result[i].Name = obj.Key
+			}
 		}
 	}
 	return result
+}
+
+// GetDirectChildren returns only immediate children (non-recursive) for hierarchical navigation
+func (s *Service) GetDirectChildren(ctx context.Context, bucketName, prefix string, limit, offset int) ([]dto.S3Object, error) {
+	bucket, err := s.queries.GetBucket(ctx, bucketName)
+	if err != nil {
+		return nil, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
+		BucketID: bucket.ID,
+		Column2:  prefix,
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get direct children: %w", err)
+	}
+
+	return s.convertToDTO(objects), nil
+}
+
+// GetBreadcrumbPath returns parent folders for breadcrumb navigation
+func (s *Service) GetBreadcrumbPath(ctx context.Context, bucketName, currentPath string) ([]dto.S3Object, error) {
+	bucket, err := s.queries.GetBucket(ctx, bucketName)
+	if err != nil {
+		return nil, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	if currentPath == "" {
+		return []dto.S3Object{}, nil
+	}
+
+	breadcrumbs, err := s.queries.GetBreadcrumbPath(ctx, database.GetBreadcrumbPathParams{
+		BucketID: bucket.ID,
+		Key:      currentPath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get breadcrumb path: %w", err)
+	}
+
+	return s.convertToDTO(breadcrumbs), nil
+}
+
+// GetParentFolder returns the parent folder of the given path
+func (s *Service) GetParentFolder(ctx context.Context, bucketName, folderPath string) (*dto.S3Object, error) {
+	if folderPath == "" {
+		return nil, nil
+	}
+
+	bucket, err := s.queries.GetBucket(ctx, bucketName)
+	if err != nil {
+		return nil, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	parentFolder, err := s.queries.GetParentFolder(ctx, database.GetParentFolderParams{
+		BucketID: bucket.ID,
+		Key:      folderPath,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get parent folder: %w", err)
+	}
+
+	converted := s.convertToDTO([]database.S3Object{parentFolder})
+	if len(converted) > 0 {
+		return &converted[0], nil
+	}
+	return nil, nil
+}
+
+// BuildBreadcrumbs creates breadcrumb navigation from a path
+func (s *Service) BuildBreadcrumbs(path string) []dto.Breadcrumb {
+	if path == "" {
+		return []dto.Breadcrumb{{Name: "Root", Path: ""}}
+	}
+
+	var breadcrumbs []dto.Breadcrumb
+	breadcrumbs = append(breadcrumbs, dto.Breadcrumb{Name: "Root", Path: ""})
+
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	currentPath := ""
+
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if currentPath != "" {
+			currentPath += "/"
+		}
+		currentPath += part
+		breadcrumbs = append(breadcrumbs, dto.Breadcrumb{
+			Name: part,
+			Path: currentPath + "/",
+		})
+	}
+
+	return breadcrumbs
 }
 
 // formatSize formats file size in human readable format

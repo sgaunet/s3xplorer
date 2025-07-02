@@ -64,8 +64,8 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 
 	// Update scan job to running
 	_, err = s.queries.UpdateScanJobStatus(ctx, database.UpdateScanJobStatusParams{
-		ID:     scanJob.ID,
-		Status: "running",
+		ID:      scanJob.ID,
+		Column2: "running",
 	})
 	if err != nil {
 		s.log.Error("Failed to update scan job status", slog.String("error", err.Error()))
@@ -86,8 +86,8 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 			}
 		} else {
 			_, updateErr := s.queries.UpdateScanJobStatus(ctx, database.UpdateScanJobStatusParams{
-				ID:     scanJob.ID,
-				Status: "completed",
+				ID:      scanJob.ID,
+				Column2: "completed",
 			})
 			if updateErr != nil {
 				s.log.Error("Failed to update scan job status", slog.String("error", updateErr.Error()))
@@ -171,6 +171,15 @@ func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.O
 		prefix = key[:idx+1]
 	}
 
+	// Create missing intermediate folder entries
+	if prefix != "" {
+		if err := s.ensureParentFolders(ctx, bucketID, prefix); err != nil {
+			s.log.Error("Failed to create parent folders", 
+				slog.String("prefix", prefix), 
+				slog.String("error", err.Error()))
+		}
+	}
+
 	// Create or update the object
 	_, err := s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
 		BucketID:     bucketID,
@@ -184,6 +193,59 @@ func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.O
 	})
 
 	return err
+}
+
+// ensureParentFolders creates all missing intermediate folder entries for a given path
+func (s *Service) ensureParentFolders(ctx context.Context, bucketID int32, fullPath string) error {
+	// Remove trailing slash and split the path
+	cleanPath := strings.TrimSuffix(fullPath, "/")
+	if cleanPath == "" {
+		return nil
+	}
+	
+	parts := strings.Split(cleanPath, "/")
+	currentPath := ""
+	
+	// Create each folder level
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		
+		// Build the current folder path
+		if currentPath != "" {
+			currentPath += "/"
+		}
+		currentPath += part
+		folderKey := currentPath + "/"
+		
+		// Determine the parent prefix for this folder
+		parentPrefix := ""
+		if i > 0 {
+			// Parent is all parts before this one
+			parentPath := strings.Join(parts[:i], "/")
+			if parentPath != "" {
+				parentPrefix = parentPath + "/"
+			}
+		}
+		
+		// Create the folder entry (this will ignore if it already exists due to ON CONFLICT)
+		_, err := s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
+			BucketID:     bucketID,
+			Key:          folderKey,
+			Size:         0,
+			LastModified: sql.NullTime{Time: time.Now(), Valid: true},
+			Etag:         sql.NullString{},
+			StorageClass: sql.NullString{},
+			IsFolder:     sql.NullBool{Bool: true, Valid: true},
+			Prefix:       sql.NullString{String: parentPrefix, Valid: parentPrefix != ""},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create folder %s: %w", folderKey, err)
+		}
+	}
+	
+	return nil
 }
 
 // processFolder processes a folder prefix and saves it to the database
