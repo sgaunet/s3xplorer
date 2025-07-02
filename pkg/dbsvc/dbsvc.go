@@ -170,6 +170,13 @@ func (s *Service) convertToDTO(objects []database.S3Object) []dto.S3Object {
 		// Format size for display
 		result[i].SizeHuman = s.formatSize(obj.Size)
 		
+		// Set download availability based on storage class
+		// Objects are downloadable if they are in STANDARD storage or if storage class is empty
+		// For Glacier objects, they would need to be restored first (not implemented in DB service)
+		storageClass := obj.StorageClass.String
+		result[i].IsDownloadable = (storageClass == "" || storageClass == "STANDARD")
+		result[i].IsRestoring = false // DB doesn't track restore status, assume false
+		
 		// Extract filename/folder name from key
 		if obj.IsFolder.Bool {
 			// For folders, remove trailing slash and get the last part
