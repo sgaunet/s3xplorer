@@ -74,6 +74,22 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	objectCount := 0
 	var scanErr error
 
+	// Phase 1: Mark all existing objects as potentially deleted (if deletion sync is enabled)
+	if s.cfg.EnableDeletionSync {
+		s.log.Info("Phase 1: Marking all objects for deletion check", slog.String("bucket", bucketName))
+		if err := s.queries.MarkAllObjectsForDeletion(ctx, bucket.ID); err != nil {
+			scanErr = fmt.Errorf("failed to mark objects for deletion: %w", err)
+			return scanErr
+		}
+	} else {
+		s.log.Info("Deletion sync disabled - skipping Phase 1", slog.String("bucket", bucketName))
+	}
+
+	// Initialize counters for tracking scan statistics
+	objectsCreated := 0
+	objectsUpdated := 0
+	objectsDeleted := 0
+
 	// Scan the bucket
 	defer func() {
 		if scanErr != nil {
@@ -85,7 +101,19 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 				s.log.Error("Failed to update scan job error", slog.String("error", updateErr.Error()))
 			}
 		} else {
-			_, updateErr := s.queries.UpdateScanJobStatus(ctx, database.UpdateScanJobStatusParams{
+			// Update final statistics
+			_, updateErr := s.queries.UpdateScanJobStats(ctx, database.UpdateScanJobStatsParams{
+				ID:             scanJob.ID,
+				ObjectsScanned: sql.NullInt32{Int32: int32(objectCount), Valid: true},
+				ObjectsCreated: sql.NullInt32{Int32: int32(objectsCreated), Valid: true},
+				ObjectsUpdated: sql.NullInt32{Int32: int32(objectsUpdated), Valid: true},
+				ObjectsDeleted: sql.NullInt32{Int32: int32(objectsDeleted), Valid: true},
+			})
+			if updateErr != nil {
+				s.log.Error("Failed to update scan job stats", slog.String("error", updateErr.Error()))
+			}
+
+			_, updateErr = s.queries.UpdateScanJobStatus(ctx, database.UpdateScanJobStatusParams{
 				ID:      scanJob.ID,
 				Column2: "completed",
 			})
@@ -108,13 +136,21 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 			return scanErr
 		}
 
-		// Process each object
+		// Process each object (Phase 2: Update/create and unmark for deletion)
 		for _, obj := range page.Contents {
-			if err := s.processObject(ctx, bucket.ID, obj); err != nil {
+			isNew, err := s.processObject(ctx, bucket.ID, obj)
+			if err != nil {
 				s.log.Error("Failed to process object", 
 					slog.String("key", aws.ToString(obj.Key)), 
 					slog.String("error", err.Error()))
 				continue
+			}
+
+			// Track creation vs update statistics
+			if isNew {
+				objectsCreated++
+			} else {
+				objectsUpdated++
 			}
 			objectCount++
 
@@ -132,13 +168,44 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 
 		// Process common prefixes (folders)
 		for _, prefix := range page.CommonPrefixes {
-			if err := s.processFolder(ctx, bucket.ID, aws.ToString(prefix.Prefix)); err != nil {
+			isNew, err := s.processFolder(ctx, bucket.ID, aws.ToString(prefix.Prefix))
+			if err != nil {
 				s.log.Error("Failed to process folder", 
 					slog.String("prefix", aws.ToString(prefix.Prefix)), 
 					slog.String("error", err.Error()))
 				continue
 			}
+
+			// Track folder creation vs update statistics
+			if isNew {
+				objectsCreated++
+			} else {
+				objectsUpdated++
+			}
 		}
+	}
+
+	// Phase 3: Delete objects that are still marked for deletion (if deletion sync is enabled)
+	if s.cfg.EnableDeletionSync {
+		s.log.Info("Phase 3: Cleaning up deleted objects", slog.String("bucket", bucketName))
+		markedCount, err := s.queries.CountMarkedObjects(ctx, bucket.ID)
+		if err != nil {
+			s.log.Error("Failed to count marked objects", slog.String("error", err.Error()))
+		} else {
+			objectsDeleted = int(markedCount)
+			if objectsDeleted > 0 {
+				s.log.Info("Deleting objects no longer in S3", 
+					slog.String("bucket", bucketName), 
+					slog.Int("count", objectsDeleted))
+				if err := s.queries.DeleteMarkedObjects(ctx, bucket.ID); err != nil {
+					s.log.Error("Failed to delete marked objects", slog.String("error", err.Error()))
+					// Don't fail the entire scan if deletion cleanup fails
+					objectsDeleted = 0
+				}
+			}
+		}
+	} else {
+		s.log.Info("Deletion sync disabled - skipping Phase 3", slog.String("bucket", bucketName))
 	}
 
 	// Final progress update
@@ -152,13 +219,17 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 
 	s.log.Info("Bucket scan completed", 
 		slog.String("bucket", bucketName), 
-		slog.Int("objects", objectCount))
+		slog.Int("objects_scanned", objectCount),
+		slog.Int("objects_created", objectsCreated),
+		slog.Int("objects_updated", objectsUpdated),
+		slog.Int("objects_deleted", objectsDeleted))
 
 	return nil
 }
 
 // processObject processes a single S3 object and saves it to the database
-func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.Object) error {
+// Returns true if object was newly created, false if it was updated
+func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.Object) (bool, error) {
 	key := aws.ToString(obj.Key)
 	size := obj.Size
 	lastModified := obj.LastModified
@@ -180,8 +251,15 @@ func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.O
 		}
 	}
 
+	// Check if object already exists to determine if it's new or updated
+	_, err := s.queries.GetS3Object(ctx, database.GetS3ObjectParams{
+		BucketID: bucketID,
+		Key:      key,
+	})
+	isNew := err != nil // If we get an error, the object doesn't exist
+
 	// Create or update the object
-	_, err := s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
+	_, err = s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
 		BucketID:     bucketID,
 		Key:          key,
 		Size:         *size,
@@ -191,8 +269,24 @@ func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.O
 		IsFolder:     sql.NullBool{Bool: false, Valid: true},
 		Prefix:       sql.NullString{String: prefix, Valid: prefix != ""},
 	})
+	if err != nil {
+		return false, err
+	}
 
-	return err
+	// Unmark the object for deletion since we found it in S3 (if deletion sync is enabled)
+	if s.cfg.EnableDeletionSync {
+		if err := s.queries.UnmarkObjectForDeletion(ctx, database.UnmarkObjectForDeletionParams{
+			BucketID: bucketID,
+			Key:      key,
+		}); err != nil {
+			s.log.Error("Failed to unmark object for deletion", 
+				slog.String("key", key), 
+				slog.String("error", err.Error()))
+			// Don't fail the scan if unmarking fails
+		}
+	}
+
+	return isNew, nil
 }
 
 // ensureParentFolders creates all missing intermediate folder entries for a given path
@@ -249,7 +343,8 @@ func (s *Service) ensureParentFolders(ctx context.Context, bucketID int32, fullP
 }
 
 // processFolder processes a folder prefix and saves it to the database
-func (s *Service) processFolder(ctx context.Context, bucketID int32, folderPrefix string) error {
+// Returns true if folder was newly created, false if it was updated
+func (s *Service) processFolder(ctx context.Context, bucketID int32, folderPrefix string) (bool, error) {
 	// Remove trailing slash for folder name
 	folderKey := strings.TrimSuffix(folderPrefix, "/")
 	
@@ -259,8 +354,15 @@ func (s *Service) processFolder(ctx context.Context, bucketID int32, folderPrefi
 		parentPrefix = folderKey[:idx+1]
 	}
 
+	// Check if folder already exists to determine if it's new or updated
+	_, err := s.queries.GetS3Object(ctx, database.GetS3ObjectParams{
+		BucketID: bucketID,
+		Key:      folderPrefix,
+	})
+	isNew := err != nil // If we get an error, the folder doesn't exist
+
 	// Create the folder entry
-	_, err := s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
+	_, err = s.queries.CreateS3Object(ctx, database.CreateS3ObjectParams{
 		BucketID:     bucketID,
 		Key:          folderPrefix, // Keep trailing slash for folders
 		Size:         0,
@@ -270,8 +372,24 @@ func (s *Service) processFolder(ctx context.Context, bucketID int32, folderPrefi
 		IsFolder:     sql.NullBool{Bool: true, Valid: true},
 		Prefix:       sql.NullString{String: parentPrefix, Valid: parentPrefix != ""},
 	})
+	if err != nil {
+		return false, err
+	}
 
-	return err
+	// Unmark the folder for deletion since we found it in S3 (if deletion sync is enabled)
+	if s.cfg.EnableDeletionSync {
+		if err := s.queries.UnmarkObjectForDeletion(ctx, database.UnmarkObjectForDeletionParams{
+			BucketID: bucketID,
+			Key:      folderPrefix,
+		}); err != nil {
+			s.log.Error("Failed to unmark folder for deletion", 
+				slog.String("key", folderPrefix), 
+				slog.String("error", err.Error()))
+			// Don't fail the scan if unmarking fails
+		}
+	}
+
+	return isNew, nil
 }
 
 // GetScanStatus returns the status of the latest scan job for a bucket

@@ -54,6 +54,7 @@ ON CONFLICT (bucket_id, key) DO UPDATE SET
     storage_class = EXCLUDED.storage_class,
     is_folder = EXCLUDED.is_folder,
     prefix = EXCLUDED.prefix,
+    marked_for_deletion = FALSE,
     updated_at = NOW()
 RETURNING *;
 
@@ -122,3 +123,27 @@ WHERE bucket_id = $1
   AND $2 LIKE key || '%'
   AND key != $2
 ORDER BY LENGTH(key) ASC;
+
+-- name: MarkAllObjectsForDeletion :exec
+-- Mark all objects in a bucket as potentially deleted before scanning
+UPDATE s3_objects
+SET marked_for_deletion = TRUE,
+    updated_at = NOW()
+WHERE bucket_id = $1;
+
+-- name: UnmarkObjectForDeletion :exec
+-- Unmark a specific object as not deleted (found during scan)
+UPDATE s3_objects
+SET marked_for_deletion = FALSE,
+    updated_at = NOW()
+WHERE bucket_id = $1 AND key = $2;
+
+-- name: DeleteMarkedObjects :exec
+-- Delete all objects that are still marked for deletion after scan
+DELETE FROM s3_objects
+WHERE bucket_id = $1 AND marked_for_deletion = TRUE;
+
+-- name: CountMarkedObjects :one
+-- Count objects marked for deletion
+SELECT COUNT(*) FROM s3_objects
+WHERE bucket_id = $1 AND marked_for_deletion = TRUE;

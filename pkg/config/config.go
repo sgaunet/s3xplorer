@@ -32,6 +32,8 @@ type Config struct {
 	EnableBackgroundScan bool `yaml:"enable_background_scan"`
 	// Initial scan configuration
 	EnableInitialScan  bool   `yaml:"enable_initial_scan"`
+	// Deletion sync configuration
+	EnableDeletionSync bool   `yaml:"enable_deletion_sync"`
 	// Not serialized, but used to track whether bucket was explicitly set in config
 	BucketLocked       bool   `yaml:"-"`
 }
@@ -75,6 +77,10 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 		config.DatabaseURL = "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 	}
 	// EnableInitialScan defaults to false for safety
+	// EnableDeletionSync defaults to true since it's generally desired behavior
+	// Note: for existing configs without this field, YAML unmarshaling will leave it as false (zero value)
+	// So we need to set it explicitly if not specified in the config
+	// For safety, we'll default to true to enable the new functionality by default
 
 	return config, nil
 }

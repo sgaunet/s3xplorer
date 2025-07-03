@@ -50,3 +50,13 @@ SET status = 'failed',
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateScanJobStats :one
+UPDATE scan_jobs
+SET objects_scanned = $2,
+    objects_created = $3,
+    objects_updated = $4,
+    objects_deleted = $5,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
