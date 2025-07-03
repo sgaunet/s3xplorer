@@ -3,14 +3,18 @@ package scanner
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/sgaunet/s3xplorer/pkg/config"
 	"github.com/sgaunet/s3xplorer/pkg/database"
 )
@@ -23,6 +27,20 @@ type Service struct {
 	cfg      config.Config
 	log      *slog.Logger
 }
+
+// BucketErrorType represents the type of bucket access error
+type BucketErrorType string
+
+const (
+	// ErrorTypeNotFound indicates the bucket does not exist (404)
+	ErrorTypeNotFound BucketErrorType = "not_found"
+	// ErrorTypeAccessDenied indicates access is denied (403)
+	ErrorTypeAccessDenied BucketErrorType = "access_denied"
+	// ErrorTypeTemporary indicates a temporary error (5xx, network issues)
+	ErrorTypeTemporary BucketErrorType = "temporary"
+	// ErrorTypeUnknown indicates an unknown error type
+	ErrorTypeUnknown BucketErrorType = "unknown"
+)
 
 // NewService creates a new scanner service
 func NewService(cfg config.Config, s3Client *s3.Client, db *sql.DB) *Service {
@@ -40,9 +58,106 @@ func (s *Service) SetLogger(log *slog.Logger) {
 	s.log = log
 }
 
+// classifyBucketError classifies S3 bucket access errors by type
+func (s *Service) classifyBucketError(err error) BucketErrorType {
+	if err == nil {
+		return ErrorTypeUnknown
+	}
+
+	// Check for AWS API errors
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchBucket", "BucketNotFound":
+			return ErrorTypeNotFound
+		case "AccessDenied", "Forbidden":
+			return ErrorTypeAccessDenied
+		case "InternalError", "ServiceUnavailable", "SlowDown":
+			return ErrorTypeTemporary
+		}
+	}
+
+	// Check for HTTP response errors
+	var httpErr *smithyhttp.ResponseError
+	if errors.As(err, &httpErr) {
+		switch httpErr.HTTPStatusCode() {
+		case http.StatusNotFound:
+			return ErrorTypeNotFound
+		case http.StatusForbidden:
+			return ErrorTypeAccessDenied
+		case http.StatusInternalServerError, http.StatusBadGateway, 
+			 http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return ErrorTypeTemporary
+		}
+	}
+
+	// Check for network/connection errors
+	errStr := strings.ToLower(err.Error())
+	if strings.Contains(errStr, "connection") || 
+	   strings.Contains(errStr, "timeout") || 
+	   strings.Contains(errStr, "network") {
+		return ErrorTypeTemporary
+	}
+
+	return ErrorTypeUnknown
+}
+
+// formatErrorWithClassification formats an error with classification information
+func (s *Service) formatErrorWithClassification(err error, context string) string {
+	if err == nil {
+		return ""
+	}
+	
+	errorType := s.classifyBucketError(err)
+	return fmt.Sprintf("%s (%s): %s", context, errorType, err.Error())
+}
+
 // ScanBucket scans an entire S3 bucket and saves objects to PostgreSQL
 func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	s.log.Info("Starting bucket scan", slog.String("bucket", bucketName))
+
+	// First, validate bucket accessibility before proceeding
+	if err := s.validateBucketAccessibility(ctx, bucketName); err != nil {
+		errorType := s.classifyBucketError(err)
+		s.log.Error("Bucket accessibility check failed", 
+			slog.String("bucket", bucketName), 
+			slog.String("error", err.Error()),
+			slog.String("error_type", string(errorType)))
+		
+		// For permanent errors, mark the bucket as inaccessible in the database
+		if errorType == ErrorTypeNotFound || errorType == ErrorTypeAccessDenied {
+			// Create or get bucket record to mark it as inaccessible
+			bucket, bucketErr := s.queries.CreateBucket(ctx, database.CreateBucketParams{
+				Name:   bucketName,
+				Region: sql.NullString{String: s.cfg.S3Region, Valid: s.cfg.S3Region != ""},
+			})
+			if bucketErr == nil {
+				// Mark bucket for deletion and update access error
+				markErr := s.queries.MarkBucketForDeletion(ctx, bucket.ID)
+				if markErr != nil {
+					s.log.Error("Failed to mark bucket for deletion", 
+						slog.String("bucket", bucketName),
+						slog.String("error", markErr.Error()))
+				}
+				
+				updateErr := s.queries.UpdateBucketAccessError(ctx, database.UpdateBucketAccessErrorParams{
+					ID:          bucket.ID,
+					AccessError: sql.NullString{String: err.Error(), Valid: true},
+				})
+				if updateErr != nil {
+					s.log.Error("Failed to update bucket access error", 
+						slog.String("bucket", bucketName),
+						slog.String("error", updateErr.Error()))
+				}
+				
+				s.log.Warn("Bucket marked as inaccessible due to permanent error", 
+					slog.String("bucket", bucketName),
+					slog.String("error_type", string(errorType)))
+			}
+		}
+		
+		return fmt.Errorf("bucket %s is not accessible (%s): %w", bucketName, errorType, err)
+	}
 
 	// Create or get bucket record
 	bucket, err := s.queries.CreateBucket(ctx, database.CreateBucketParams{
@@ -51,6 +166,13 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create/get bucket: %w", err)
+	}
+
+	// Since bucket is accessible, unmark it for deletion and clear any access errors
+	if unmarkErr := s.queries.UnmarkBucketForDeletion(ctx, bucket.ID); unmarkErr != nil {
+		s.log.Error("Failed to unmark bucket for deletion", 
+			slog.String("bucket", bucketName),
+			slog.String("error", unmarkErr.Error()))
 	}
 
 	// Create scan job
@@ -93,21 +215,27 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	// Scan the bucket
 	defer func() {
 		if scanErr != nil {
+			// Format error with classification for better tracking
+			errorMsg := s.formatErrorWithClassification(scanErr, "Bucket scan failed")
 			_, updateErr := s.queries.UpdateScanJobError(ctx, database.UpdateScanJobErrorParams{
 				ID:           scanJob.ID,
-				ErrorMessage: sql.NullString{String: scanErr.Error(), Valid: true},
+				ErrorMessage: sql.NullString{String: errorMsg, Valid: true},
 			})
 			if updateErr != nil {
 				s.log.Error("Failed to update scan job error", slog.String("error", updateErr.Error()))
 			}
 		} else {
-			// Update final statistics
-			_, updateErr := s.queries.UpdateScanJobStats(ctx, database.UpdateScanJobStatsParams{
-				ID:             scanJob.ID,
-				ObjectsScanned: sql.NullInt32{Int32: int32(objectCount), Valid: true},
-				ObjectsCreated: sql.NullInt32{Int32: int32(objectsCreated), Valid: true},
-				ObjectsUpdated: sql.NullInt32{Int32: int32(objectsUpdated), Valid: true},
-				ObjectsDeleted: sql.NullInt32{Int32: int32(objectsDeleted), Valid: true},
+			// Update final statistics including bucket sync stats (default to 0 for individual bucket scans)
+			_, updateErr := s.queries.UpdateScanJobFullStats(ctx, database.UpdateScanJobFullStatsParams{
+				ID:                         scanJob.ID,
+				ObjectsScanned:            sql.NullInt32{Int32: int32(objectCount), Valid: true},
+				ObjectsCreated:            sql.NullInt32{Int32: int32(objectsCreated), Valid: true},
+				ObjectsUpdated:            sql.NullInt32{Int32: int32(objectsUpdated), Valid: true},
+				ObjectsDeleted:            sql.NullInt32{Int32: int32(objectsDeleted), Valid: true},
+				BucketsValidated:          sql.NullInt32{Int32: 0, Valid: true}, // Individual bucket scans don't validate buckets
+				BucketsMarkedInaccessible: sql.NullInt32{Int32: 0, Valid: true},
+				BucketsCleanedUp:          sql.NullInt32{Int32: 0, Valid: true},
+				BucketValidationErrors:    sql.NullInt32{Int32: 0, Valid: true},
 			})
 			if updateErr != nil {
 				s.log.Error("Failed to update scan job stats", slog.String("error", updateErr.Error()))
@@ -407,13 +535,25 @@ func (s *Service) GetScanStatus(ctx context.Context, bucketName string) (*databa
 	return &scanJob, nil
 }
 
-// DiscoverAndScanAllBuckets discovers all available buckets and scans them
+// DiscoverAndScanAllBuckets discovers all available buckets, validates them, and scans them
 func (s *Service) DiscoverAndScanAllBuckets(ctx context.Context) error {
 	s.log.Info("Starting discovery and initial scan of all buckets")
 
 	// If a specific bucket is configured, only scan that bucket
 	if s.cfg.Bucket != "" {
 		s.log.Info("Scanning configured bucket", slog.String("bucket", s.cfg.Bucket))
+		
+		// Perform bucket validation if enabled
+		if s.cfg.EnableBucketSync {
+			_, _, _, _, err := s.validateAndSyncBuckets(ctx, []string{s.cfg.Bucket})
+			if err != nil {
+				s.log.Error("Failed to validate configured bucket", 
+					slog.String("bucket", s.cfg.Bucket), 
+					slog.String("error", err.Error()))
+				// Continue with scan even if validation fails
+			}
+		}
+		
 		return s.ScanBucket(ctx, s.cfg.Bucket)
 	}
 
@@ -425,18 +565,30 @@ func (s *Service) DiscoverAndScanAllBuckets(ctx context.Context) error {
 
 	s.log.Info("Discovered buckets", slog.Int("count", len(buckets)))
 
-	// Scan each bucket
-	for _, bucket := range buckets {
-		s.log.Info("Scanning bucket", slog.String("bucket", bucket))
-		if err := s.ScanBucket(ctx, bucket); err != nil {
-			s.log.Error("Failed to scan bucket", 
-				slog.String("bucket", bucket), 
-				slog.String("error", err.Error()))
-			continue // Continue with other buckets
-		}
+	// Perform bucket validation and synchronization
+	bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors, err := 
+		s.validateAndSyncBuckets(ctx, buckets)
+	if err != nil {
+		s.log.Error("Failed to validate and sync buckets", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to validate buckets: %w", err)
 	}
 
-	s.log.Info("Completed initial scan of all buckets")
+	s.log.Info("Bucket validation completed", 
+		slog.Int("buckets_validated", bucketsValidated),
+		slog.Int("buckets_marked_inaccessible", bucketsMarkedInaccessible),
+		slog.Int("buckets_cleaned_up", bucketsCleanedUp),
+		slog.Int("bucket_validation_errors", bucketValidationErrors))
+
+	// Scan each discovered bucket using the tracking function
+	if err := s.ScanAllBucketsWithTracking(ctx, buckets, bucketsValidated, 
+		bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors); err != nil {
+		s.log.Error("Failed to scan buckets with tracking", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to scan buckets: %w", err)
+	}
+
+	s.log.Info("Completed discovery, validation, and scan of all buckets",
+		slog.Int("buckets_discovered", len(buckets)),
+		slog.Int("buckets_validated", bucketsValidated))
 	return nil
 }
 
@@ -457,6 +609,252 @@ func (s *Service) discoverBuckets(ctx context.Context) ([]string, error) {
 	}
 
 	return buckets, nil
+}
+
+// validateBucketAccessibility tests if a bucket is accessible using HeadBucket operation
+func (s *Service) validateBucketAccessibility(ctx context.Context, bucketName string) error {
+	s.log.Debug("Validating bucket accessibility", slog.String("bucket", bucketName))
+
+	// Use HeadBucket to check if bucket is accessible
+	_, err := s.s3Client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	
+	if err != nil {
+		errorType := s.classifyBucketError(err)
+		
+		// Use appropriate log level based on error type
+		switch errorType {
+		case ErrorTypeNotFound:
+			s.log.Warn("Bucket not found", 
+				slog.String("bucket", bucketName), 
+				slog.String("error", err.Error()),
+				slog.String("error_type", string(errorType)))
+		case ErrorTypeAccessDenied:
+			s.log.Warn("Bucket access denied", 
+				slog.String("bucket", bucketName), 
+				slog.String("error", err.Error()),
+				slog.String("error_type", string(errorType)))
+		case ErrorTypeTemporary:
+			s.log.Debug("Bucket temporarily inaccessible", 
+				slog.String("bucket", bucketName), 
+				slog.String("error", err.Error()),
+				slog.String("error_type", string(errorType)))
+		case ErrorTypeUnknown:
+			s.log.Error("Unknown bucket accessibility error", 
+				slog.String("bucket", bucketName), 
+				slog.String("error", err.Error()),
+				slog.String("error_type", string(errorType)))
+		}
+		
+		return fmt.Errorf("bucket %s is not accessible: %w", bucketName, err)
+	}
+
+	s.log.Debug("Bucket accessibility check passed", slog.String("bucket", bucketName))
+	return nil
+}
+
+// validateAndSyncBuckets performs bucket-level validation and synchronization
+func (s *Service) validateAndSyncBuckets(ctx context.Context, discoveredBuckets []string) (int, int, int, int, error) {
+	if !s.cfg.EnableBucketSync {
+		s.log.Debug("Bucket sync disabled - skipping bucket validation")
+		return 0, 0, 0, 0, nil
+	}
+
+	s.log.Info("Starting bucket validation and synchronization")
+
+	// Counters for bucket sync statistics
+	bucketsValidated := 0
+	bucketsMarkedInaccessible := 0
+	bucketsCleanedUp := 0
+	bucketValidationErrors := 0
+
+	// Phase 1: Mark all existing buckets for deletion validation
+	s.log.Debug("Phase 1: Marking all buckets for validation")
+	if err := s.queries.MarkAllBucketsForDeletion(ctx); err != nil {
+		s.log.Error("Failed to mark all buckets for deletion", slog.String("error", err.Error()))
+		return 0, 0, 0, 0, fmt.Errorf("failed to mark buckets for validation: %w", err)
+	}
+
+	// Phase 2: Validate discovered buckets and unmark accessible ones
+	s.log.Debug("Phase 2: Validating discovered buckets")
+	for _, bucketName := range discoveredBuckets {
+		bucketsValidated++
+		
+		// Get bucket record
+		bucket, err := s.queries.GetBucket(ctx, bucketName)
+		if err != nil {
+			s.log.Debug("Bucket not found in database during validation", 
+				slog.String("bucket", bucketName))
+			continue
+		}
+
+		// Test accessibility with retries
+		var accessErr error
+		for retry := 0; retry < s.cfg.BucketMaxRetries; retry++ {
+			accessErr = s.validateBucketAccessibility(ctx, bucketName)
+			if accessErr == nil {
+				break
+			}
+			
+			if retry < s.cfg.BucketMaxRetries-1 {
+				s.log.Debug("Retrying bucket accessibility check", 
+					slog.String("bucket", bucketName), 
+					slog.Int("retry", retry+1))
+				time.Sleep(time.Second * time.Duration(retry+1)) // Exponential backoff
+			}
+		}
+
+		if accessErr != nil {
+			// Bucket is not accessible - record error and mark as inaccessible
+			bucketsMarkedInaccessible++
+			bucketValidationErrors++
+			
+			if err := s.queries.UpdateBucketAccessError(ctx, database.UpdateBucketAccessErrorParams{
+				ID:          bucket.ID,
+				AccessError: sql.NullString{String: accessErr.Error(), Valid: true},
+			}); err != nil {
+				s.log.Error("Failed to update bucket access error", 
+					slog.String("bucket", bucketName), 
+					slog.String("error", err.Error()))
+			}
+		} else {
+			// Bucket is accessible - unmark for deletion
+			if err := s.queries.UnmarkBucketForDeletion(ctx, bucket.ID); err != nil {
+				s.log.Error("Failed to unmark bucket for deletion", 
+					slog.String("bucket", bucketName), 
+					slog.String("error", err.Error()))
+			}
+		}
+	}
+
+	// Phase 3: Clean up buckets that have been inaccessible for too long
+	s.log.Debug("Phase 3: Cleaning up long-term inaccessible buckets")
+	
+	// Parse deletion threshold
+	deleteThreshold, err := time.ParseDuration(s.cfg.BucketDeleteThreshold)
+	if err != nil {
+		s.log.Error("Invalid bucket delete threshold", 
+			slog.String("threshold", s.cfg.BucketDeleteThreshold), 
+			slog.String("error", err.Error()))
+		return bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors, nil
+	}
+
+	// Get buckets that should be deleted
+	bucketsToDelete, err := s.queries.GetBucketsToDelete(ctx, int32(deleteThreshold.Hours()))
+	if err != nil {
+		s.log.Error("Failed to get buckets to delete", slog.String("error", err.Error()))
+		return bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors, nil
+	}
+
+	// Delete the buckets
+	if len(bucketsToDelete) > 0 {
+		s.log.Info("Deleting long-term inaccessible buckets", 
+			slog.Int("count", len(bucketsToDelete)))
+		
+		if err := s.queries.DeleteMarkedBuckets(ctx, int32(deleteThreshold.Hours())); err != nil {
+			s.log.Error("Failed to delete marked buckets", slog.String("error", err.Error()))
+		} else {
+			bucketsCleanedUp = len(bucketsToDelete)
+		}
+	}
+
+	s.log.Info("Bucket validation and synchronization completed", 
+		slog.Int("buckets_validated", bucketsValidated),
+		slog.Int("buckets_marked_inaccessible", bucketsMarkedInaccessible),
+		slog.Int("buckets_cleaned_up", bucketsCleanedUp),
+		slog.Int("bucket_validation_errors", bucketValidationErrors))
+
+	return bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors, nil
+}
+
+// ScanAllBucketsWithTracking scans multiple buckets and tracks bucket sync statistics
+func (s *Service) ScanAllBucketsWithTracking(ctx context.Context, buckets []string, bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors int) error {
+	if len(buckets) == 0 {
+		s.log.Info("No buckets to scan")
+		return nil
+	}
+
+	s.log.Info("Starting bulk bucket scan with tracking", 
+		slog.Int("bucket_count", len(buckets)),
+		slog.Int("buckets_validated", bucketsValidated))
+
+	// Note: Individual bucket scan jobs will be created for each bucket
+	// Multi-bucket scan tracking is handled through individual bucket jobs
+
+	totalObjectsScanned := 0
+	totalObjectsCreated := 0
+	totalObjectsUpdated := 0
+	totalObjectsDeleted := 0
+	bucketsScannedSuccessfully := 0
+	bucketsFailedPermanently := 0
+	bucketsFailedTemporarily := 0
+
+	// Scan each bucket
+	for _, bucket := range buckets {
+		s.log.Info("Scanning bucket", slog.String("bucket", bucket))
+		if err := s.ScanBucket(ctx, bucket); err != nil {
+			errorType := s.classifyBucketError(err)
+			s.log.Error("Failed to scan bucket", 
+				slog.String("bucket", bucket), 
+				slog.String("error", err.Error()),
+				slog.String("error_type", string(errorType)))
+			
+			// Track failure types for reporting
+			if errorType == ErrorTypeNotFound || errorType == ErrorTypeAccessDenied {
+				bucketsFailedPermanently++
+			} else {
+				bucketsFailedTemporarily++
+			}
+			
+			continue // Continue with other buckets
+		}
+		bucketsScannedSuccessfully++
+
+		// Get the latest scan job stats for this bucket to add to global totals
+		bucketRecord, err := s.queries.GetBucket(ctx, bucket)
+		if err != nil {
+			s.log.Debug("Could not get bucket record for stats aggregation", 
+				slog.String("bucket", bucket))
+			continue
+		}
+
+		latestScanJob, err := s.queries.GetLatestScanJob(ctx, bucketRecord.ID)
+		if err != nil {
+			s.log.Debug("Could not get latest scan job for stats aggregation", 
+				slog.String("bucket", bucket))
+			continue
+		}
+
+		// Aggregate statistics
+		if latestScanJob.ObjectsScanned.Valid {
+			totalObjectsScanned += int(latestScanJob.ObjectsScanned.Int32)
+		}
+		if latestScanJob.ObjectsCreated.Valid {
+			totalObjectsCreated += int(latestScanJob.ObjectsCreated.Int32)
+		}
+		if latestScanJob.ObjectsUpdated.Valid {
+			totalObjectsUpdated += int(latestScanJob.ObjectsUpdated.Int32)
+		}
+		if latestScanJob.ObjectsDeleted.Valid {
+			totalObjectsDeleted += int(latestScanJob.ObjectsDeleted.Int32)
+		}
+	}
+
+	// Multi-bucket scan statistics are tracked through individual bucket scan jobs
+	// Aggregated statistics are logged here for monitoring purposes
+
+	s.log.Info("Completed bulk bucket scan with tracking",
+		slog.Int("buckets_total", len(buckets)),
+		slog.Int("buckets_scanned_successfully", bucketsScannedSuccessfully),
+		slog.Int("buckets_failed_permanently", bucketsFailedPermanently),
+		slog.Int("buckets_failed_temporarily", bucketsFailedTemporarily),
+		slog.Int("total_objects_scanned", totalObjectsScanned),
+		slog.Int("buckets_validated", bucketsValidated),
+		slog.Int("buckets_marked_inaccessible", bucketsMarkedInaccessible),
+		slog.Int("buckets_cleaned_up", bucketsCleanedUp))
+
+	return nil
 }
 
 // ScanConfiguredBucket scans only the bucket specified in configuration

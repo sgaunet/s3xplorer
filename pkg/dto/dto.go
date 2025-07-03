@@ -18,11 +18,17 @@ type S3Object struct {
 	IsRestoring    bool
 }
 
-// Bucket represents an S3 bucket.
+// Bucket represents an S3 bucket with accessibility status.
 type Bucket struct {
-	Name         string    `json:"name"`
-	Region       string    `json:"region"`
-	CreationDate time.Time `json:"creationDate"`
+	Name              string     `json:"name"`
+	Region            string     `json:"region"`
+	CreationDate      time.Time  `json:"creationDate"`
+	IsAccessible      bool       `json:"isAccessible"`
+	LastAccessibleAt  *time.Time `json:"lastAccessibleAt,omitempty"`
+	AccessError       string     `json:"accessError,omitempty"`
+	ScanStatus        string     `json:"scanStatus"` // success/failed/never_scanned
+	LastScanError     string     `json:"lastScanError,omitempty"`
+	LastScanCompletedAt *time.Time `json:"lastScanCompletedAt,omitempty"`
 }
 
 // Breadcrumb represents a navigation breadcrumb

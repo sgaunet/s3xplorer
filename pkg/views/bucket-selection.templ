@@ -29,6 +29,7 @@ templ BucketSelection(buckets []dto.Bucket, currentBucket string, cfg config.Con
         <thead>
           <tr>
             <th>Bucket Name</th>
+            <th>Status</th>
             <th>Creation Date</th>
             <th>Action</th>
           </tr>
@@ -37,6 +38,13 @@ templ BucketSelection(buckets []dto.Bucket, currentBucket string, cfg config.Con
           for _, bucket := range buckets {
             <tr>
               <td>{ bucket.Name }</td>
+              <td>
+                if bucket.IsAccessible {
+                  <span style="color: green;">✓ Accessible</span>
+                } else {
+                  <span style="color: red;">✗ Inaccessible</span>
+                }
+              </td>
               <td>{ bucket.CreationDate.Format(time.RFC3339) }</td>
               <td>
                 <a 

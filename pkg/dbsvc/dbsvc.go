@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sgaunet/s3xplorer/pkg/config"
 	"github.com/sgaunet/s3xplorer/pkg/database"
@@ -37,22 +38,105 @@ func (s *Service) SetLogger(log *slog.Logger) {
 	s.log = log
 }
 
-// GetBuckets returns all available buckets
+// GetBuckets returns only accessible buckets for normal user operations
 func (s *Service) GetBuckets(ctx context.Context) ([]dto.Bucket, error) {
-	buckets, err := s.queries.ListBuckets(ctx)
+	buckets, err := s.queries.ListAccessibleBuckets(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list buckets: %w", err)
+		return nil, fmt.Errorf("failed to list accessible buckets: %w", err)
 	}
 
 	result := make([]dto.Bucket, len(buckets))
 	for i, bucket := range buckets {
-		result[i] = dto.Bucket{
-			Name:   bucket.Name,
-			Region: bucket.Region.String,
-		}
+		result[i] = s.convertBucketToDTO(bucket, "", "", nil)
 	}
 
 	return result, nil
+}
+
+// GetBucketsWithStatus returns all buckets with detailed status information for admin/debug purposes
+func (s *Service) GetBucketsWithStatus(ctx context.Context) ([]dto.Bucket, error) {
+	buckets, err := s.queries.ListBucketsWithStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list buckets with status: %w", err)
+	}
+
+	result := make([]dto.Bucket, len(buckets))
+	for i, bucketRow := range buckets {
+		scanStatus := "never_scanned"
+		if bucketRow.LatestScanStatus != "" {
+			scanStatus = bucketRow.LatestScanStatus
+		}
+		
+		scanError := ""
+		if bucketRow.LatestScanError.Valid {
+			scanError = bucketRow.LatestScanError.String
+		}
+		
+		var scanCompletedAt *time.Time
+		if bucketRow.LatestScanCompletedAt.Valid {
+			scanCompletedAt = &bucketRow.LatestScanCompletedAt.Time
+		}
+		
+		// Convert the row to a Bucket struct for the helper function
+		bucket := database.Bucket{
+			ID:               bucketRow.ID,
+			Name:             bucketRow.Name,
+			Region:           bucketRow.Region,
+			CreatedAt:        bucketRow.CreatedAt,
+			UpdatedAt:        bucketRow.UpdatedAt,
+			MarkedForDeletion: bucketRow.MarkedForDeletion,
+			LastAccessibleAt: bucketRow.LastAccessibleAt,
+			AccessError:      bucketRow.AccessError,
+		}
+		
+		result[i] = s.convertBucketToDTO(bucket, scanStatus, scanError, scanCompletedAt)
+	}
+
+	return result, nil
+}
+
+// convertBucketToDTO converts a database bucket to DTO with accessibility status
+func (s *Service) convertBucketToDTO(bucket database.Bucket, scanStatus, scanError string, scanCompletedAt *time.Time) dto.Bucket {
+	isAccessible := !bucket.MarkedForDeletion.Bool && 
+		(!bucket.AccessError.Valid || bucket.AccessError.String == "" || 
+		 (bucket.LastAccessibleAt.Valid && bucket.LastAccessibleAt.Time.After(time.Now().Add(-24*time.Hour))))
+	
+	var lastAccessibleAt *time.Time
+	if bucket.LastAccessibleAt.Valid {
+		lastAccessibleAt = &bucket.LastAccessibleAt.Time
+	}
+	
+	accessError := ""
+	if bucket.AccessError.Valid {
+		accessError = bucket.AccessError.String
+	}
+	
+	if scanStatus == "" {
+		scanStatus = "never_scanned"
+	}
+	
+	// Handle nullable CreatedAt
+	creationDate := time.Time{}
+	if bucket.CreatedAt.Valid {
+		creationDate = bucket.CreatedAt.Time
+	}
+	
+	region := ""
+	if bucket.Region.Valid {
+		region = bucket.Region.String
+	}
+	
+	return dto.Bucket{
+		Name:                bucket.Name,
+		Region:              region,
+		CreationDate:        creationDate,
+		IsAccessible:        isAccessible,
+		LastAccessibleAt:    lastAccessibleAt,
+		AccessError:         accessError,
+		ScanStatus:          scanStatus,
+		LastScanError:       scanError,
+		LastScanCompletedAt: scanCompletedAt,
+	}
 }
 
 // GetFolders returns folders at the specified prefix

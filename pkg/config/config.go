@@ -34,6 +34,11 @@ type Config struct {
 	EnableInitialScan  bool   `yaml:"enable_initial_scan"`
 	// Deletion sync configuration
 	EnableDeletionSync bool   `yaml:"enable_deletion_sync"`
+	// Bucket sync configuration
+	EnableBucketSync      bool   `yaml:"enable_bucket_sync"`
+	BucketSyncThreshold   string `yaml:"bucket_sync_threshold"`
+	BucketDeleteThreshold string `yaml:"bucket_delete_threshold"`
+	BucketMaxRetries      int    `yaml:"bucket_max_retries"`
 	// Not serialized, but used to track whether bucket was explicitly set in config
 	BucketLocked       bool   `yaml:"-"`
 }
@@ -76,8 +81,19 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 	if config.DatabaseURL == "" {
 		config.DatabaseURL = "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 	}
+	// Set default values for bucket sync configuration
+	if config.BucketSyncThreshold == "" {
+		config.BucketSyncThreshold = "24h" // Mark as inaccessible after 24 hours
+	}
+	if config.BucketDeleteThreshold == "" {
+		config.BucketDeleteThreshold = "168h" // Delete after 7 days (168 hours)
+	}
+	if config.BucketMaxRetries == 0 {
+		config.BucketMaxRetries = 3 // Default to 3 retries for bucket access checks
+	}
 	// EnableInitialScan defaults to false for safety
 	// EnableDeletionSync defaults to true since it's generally desired behavior
+	// EnableBucketSync defaults to true to enable bucket-level synchronization
 	// Note: for existing configs without this field, YAML unmarshaling will leave it as false (zero value)
 	// So we need to set it explicitly if not specified in the config
 	// For safety, we'll default to true to enable the new functionality by default

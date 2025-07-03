@@ -19,6 +19,11 @@ INSERT INTO scan_jobs (bucket_id, status)
 VALUES ($1, $2)
 RETURNING *;
 
+-- name: CreateGlobalScanJob :one
+INSERT INTO scan_jobs (bucket_id, status)
+VALUES (NULL, $1)
+RETURNING *;
+
 -- name: UpdateScanJobStatus :one
 UPDATE scan_jobs
 SET status = $2::text,
@@ -57,6 +62,30 @@ SET objects_scanned = $2,
     objects_created = $3,
     objects_updated = $4,
     objects_deleted = $5,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateScanJobBucketStats :one
+UPDATE scan_jobs
+SET buckets_validated = $2,
+    buckets_marked_inaccessible = $3,
+    buckets_cleaned_up = $4,
+    bucket_validation_errors = $5,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateScanJobFullStats :one
+UPDATE scan_jobs
+SET objects_scanned = $2,
+    objects_created = $3,
+    objects_updated = $4,
+    objects_deleted = $5,
+    buckets_validated = $6,
+    buckets_marked_inaccessible = $7,
+    buckets_cleaned_up = $8,
+    bucket_validation_errors = $9,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;

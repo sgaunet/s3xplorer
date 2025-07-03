@@ -49,6 +49,28 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 	newBucket := switchBucket[0]
 	s.log.Info("Switching bucket", slog.String("to", newBucket))
 
+	// Check if the requested bucket is accessible by getting it from the accessible buckets list
+	accessibleBuckets, err := s.dbsvc.GetBuckets(r.Context())
+	if err != nil {
+		s.log.Error("Failed to get accessible buckets", slog.String("error", err.Error()))
+		return true, fmt.Errorf("failed to verify bucket accessibility: %w", err)
+	}
+	
+	// Check if the requested bucket is in the accessible buckets list
+	bucketAccessible := false
+	for _, bucket := range accessibleBuckets {
+		if bucket.Name == newBucket {
+			bucketAccessible = true
+			break
+		}
+	}
+	
+	if !bucketAccessible {
+		s.log.Warn("Attempted to access inaccessible bucket", 
+			slog.String("bucket", newBucket))
+		return true, fmt.Errorf("bucket %s is not accessible", newBucket)
+	}
+
 	// Update the bucket in the s3svc service
 	s.s3svc.SwitchBucket(newBucket)
 
