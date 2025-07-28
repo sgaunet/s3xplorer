@@ -24,5 +24,26 @@ enable_background_scan: true
 # "0 0 * * 0"     - weekly on Sunday at midnight
 scan_cron_schedule: "0 2 * * *"
 
+# Deletion Sync Configuration
+# When enabled, removes objects from database that are no longer in S3 bucket
+# CAUTION: Set to false if you want to preserve historical object records
+enable_deletion_sync: true
+
+# Bucket Sync Configuration
+# When enabled, validates bucket accessibility and removes inaccessible buckets
+enable_bucket_sync: true
+# Time threshold for marking buckets as inaccessible (default: 24h)
+bucket_sync_threshold: "24h"
+# Time threshold for deleting buckets that have been inaccessible (default: 168h = 7 days)
+bucket_delete_threshold: "168h"  
+# Maximum retries for bucket accessibility checks (default: 3)
+bucket_max_retries: 3
+
+# Skip bucket validation (HeadBucket operation)
+# Set to true if your IAM user doesn't have s3:HeadBucket permission
+# Note: validation is automatically skipped when a single bucket is configured
+skip_bucket_validation: false
+
 # Logging
 loglevel: info
+

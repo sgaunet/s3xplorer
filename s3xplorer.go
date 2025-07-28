@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -164,17 +165,29 @@ func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, 
 
 	// Apply additional S3-specific options if using a custom endpoint
 	if configApp.S3endpoint != "" {
+		// Check if this is an AWS S3 endpoint (contains amazonaws.com)
+		isAwsEndpoint := strings.Contains(configApp.S3endpoint, "amazonaws.com")
+		usePathStyle := !isAwsEndpoint
+
+		// fmt.Printf("Custom endpoint detected - AWS: %t, UsePathStyle: %t\n", isAwsEndpoint, usePathStyle)
+
 		// Use functional options pattern to configure the S3 client
 		return s3.NewFromConfig(cfg, func(o *s3.Options) {
 			// Set the custom endpoint URL
 			o.BaseEndpoint = aws.String(configApp.S3endpoint)
-			// Use path-style addressing (bucket name in the URL path)
-			o.UsePathStyle = true
+			// Use path-style addressing only for non-AWS endpoints (like MinIO)
+			// AWS S3 should use virtual-hosted-style (UsePathStyle = false)
+			o.UsePathStyle = usePathStyle
+			// Ensure region is set correctly for both AWS and custom endpoints
+			o.Region = configApp.S3Region
 		}), nil
 	}
 
 	// Standard AWS S3 client configuration
-	return s3.NewFromConfig(cfg), nil
+	// For AWS S3, we need to ensure the region is properly set
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.Region = configApp.S3Region
+	}), nil
 }
 
 // GetAwsConfig returns an aws.Config based on the provided configuration.
@@ -206,7 +219,7 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		// This is handled in the NewApp > initS3Client function, which calls:
 		// s3.NewFromConfig(cfg) which gets this config
 		// The s3.NewFromConfig will apply the custom endpoint when creating the client
-		
+
 		// Note: We're intentionally not using the deprecated endpoint resolvers here
 		// When we create the S3 client, we'll use:
 		// s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -229,12 +242,33 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 	}
 
 	if cfgApp.S3accessKey != "" && cfgApp.S3ApikKey != "" {
-		cfg, err := config.LoadDefaultConfig(ctx)
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithRegion(cfgApp.S3Region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				cfgApp.S3accessKey,
+				cfgApp.S3ApikKey,
+				"",
+			)),
+		)
 		if err != nil {
 			return cfg, fmt.Errorf("error loading default config: %w", err)
 		}
-		// s.log.Debug("Default config loaded")
+		// s.log.Debug("Default config loaded with static credentials")
 		return cfg, nil
 	}
-	return cfg, errNoAwsConfigMethod
+
+	// Fall back to default credential chain (includes EC2 IAM role)
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(cfgApp.S3Region),
+	)
+	if err != nil {
+		return cfg, fmt.Errorf("error loading default config: %w", err)
+	}
+	// This will use the default credential chain:
+	// 1. Environment variables
+	// 2. Shared credentials file
+	// 3. EC2 IAM role
+	// 4. ECS task role
+	// 5. etc.
+	return cfg, nil
 }

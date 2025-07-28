@@ -38,3 +38,16 @@ scan_cron_schedule: "0 2 * * *"
 # Whether to perform a full scan of all buckets on application startup
 # This populates the database with current S3 data before starting the web server
 enable_initial_scan: true
+
+# Deletion sync configuration
+enable_deletion_sync: true
+
+# Bucket Sync Configuration
+# When enabled, validates bucket accessibility and removes inaccessible buckets
+enable_bucket_sync: true
+# Time threshold for marking buckets as inaccessible (default: 24h)
+bucket_sync_threshold: "24h"
+# Time threshold for deleting buckets that have been inaccessible (default: 168h = 7 days)
+bucket_delete_threshold: "168h"  
+# Maximum retries for bucket accessibility checks (default: 3)
+bucket_max_retries: 3

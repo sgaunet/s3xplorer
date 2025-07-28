@@ -39,6 +39,8 @@ type Config struct {
 	BucketSyncThreshold   string `yaml:"bucket_sync_threshold"`
 	BucketDeleteThreshold string `yaml:"bucket_delete_threshold"`
 	BucketMaxRetries      int    `yaml:"bucket_max_retries"`
+	// Skip bucket validation (HeadBucket operation)
+	SkipBucketValidation  bool   `yaml:"skip_bucket_validation"`
 	// Not serialized, but used to track whether bucket was explicitly set in config
 	BucketLocked       bool   `yaml:"-"`
 }

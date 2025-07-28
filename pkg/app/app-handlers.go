@@ -55,7 +55,7 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 		s.log.Error("Failed to get accessible buckets", slog.String("error", err.Error()))
 		return true, fmt.Errorf("failed to verify bucket accessibility: %w", err)
 	}
-	
+
 	// Check if the requested bucket is in the accessible buckets list
 	bucketAccessible := false
 	for _, bucket := range accessibleBuckets {
@@ -64,9 +64,9 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 			break
 		}
 	}
-	
+
 	if !bucketAccessible {
-		s.log.Warn("Attempted to access inaccessible bucket", 
+		s.log.Warn("Attempted to access inaccessible bucket",
 			slog.String("bucket", newBucket))
 		return true, fmt.Errorf("bucket %s is not accessible", newBucket)
 	}
