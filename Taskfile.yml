@@ -14,7 +14,6 @@ tasks:
     cmds:
       - go mod download
       - go generate ./...
-      # - task: sqlc
       - CGO_ENABLED=0 go build .
 
   linter:
@@ -22,11 +21,6 @@ tasks:
     cmds:
       - go generate ./...
       - golangci-lint run
-
-  # sqlc:
-  #   desc: "Generate database code with sqlc"
-  #   cmds:
-  #     - sqlc generate
 
   minio:
     desc: "Launch minio server"
@@ -62,7 +56,7 @@ tasks:
   image:
     desc: "Build/push the docker image version latest"
     cmds:
-      - docker build . -t sgaunet/{{.BINFILE}}:latest --push
+      - docker build . -t ghcr.io/sgaunet/{{.BINFILE}}:latest --push
 
   snapshot:
     desc: "Create a snapshot release"
