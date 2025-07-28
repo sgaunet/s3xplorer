@@ -1,50 +1,54 @@
-# not mandatory, can use the endpoint and region from the aws profile
-s3endpoint:
-s3region: "eu-west-3"
-accesskey: 
-apikey: 
-ssoawsprofile: my-profile
-bucket: my-bucket
-# set the prefix if you want to restrict the access to a specific folder
-prefix: my-folder
-
-# loglevel: debug | info | warn | error
-
-# Number of days that objects will be restored from Glacier (default: 2 if not specified)
-# restoredays: 7
-loglevel: info
-
-# Whether to enable the Glacier restore button (default: false if not specified)
-# If set to false, the restore button will not be shown for archived objects
-enableglacierrestore: true
+# S3 Configuration
+s3:
+  # not mandatory, can use the endpoint and region from the aws profile
+  endpoint:
+  region: "eu-west-3"
+  access_key: 
+  api_key: 
+  sso_aws_profile: my-profile
+  bucket: my-bucket
+  # set the prefix if you want to restrict the access to a specific folder
+  prefix: my-folder
+  # Number of days that objects will be restored from Glacier (default: 2 if not specified)
+  restore_days: 7
+  # Whether to enable the Glacier restore button (default: false if not specified)
+  # If set to false, the restore button will not be shown for archived objects
+  enable_glacier_restore: true
+  # Skip bucket validation (HeadBucket operation)
+  # Set to true if your IAM user doesn't have s3:HeadBucket permission
+  # Note: validation is automatically skipped when a single bucket is configured
+  skip_bucket_validation: false
 
 # Database Configuration
-database_url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
+database:
+  url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 
 # Background Scanning Configuration
-enable_background_scan: true
-# Cron schedule for scanning (default: "0 2 * * *" - daily at 2 AM)
-# Format: second minute hour day month weekday
-# Examples:
-# "0 2 * * *"     - daily at 2 AM
-# "0 */6 * * *"   - every 6 hours
-# "0 0 * * 0"     - weekly on Sunday at midnight
-scan_cron_schedule: "0 2 * * *"
-
-# Deletion sync configuration
-enable_deletion_sync: true
+scan:
+  enable_background_scan: true
+  # Cron schedule for scanning (default: "0 2 * * *" - daily at 2 AM)
+  # Format: second minute hour day month weekday
+  # Examples:
+  # "0 2 * * *"     - daily at 2 AM
+  # "0 */6 * * *"   - every 6 hours
+  # "0 0 * * 0"     - weekly on Sunday at midnight
+  cron_schedule: "0 2 * * *"
+  # Enable initial scan on startup
+  enable_initial_scan: true
+  # Deletion sync configuration
+  enable_deletion_sync: true
 
 # Bucket Sync Configuration
 # When enabled, validates bucket accessibility and removes inaccessible buckets
-enable_bucket_sync: true
-# Time threshold for marking buckets as inaccessible (default: 24h)
-bucket_sync_threshold: "24h"
-# Time threshold for deleting buckets that have been inaccessible (default: 168h = 7 days)
-bucket_delete_threshold: "168h"  
-# Maximum retries for bucket accessibility checks (default: 3)
-bucket_max_retries: 3
+bucket_sync:
+  enable: true
+  # Time threshold for marking buckets as inaccessible (default: 24h)
+  sync_threshold: "24h"
+  # Time threshold for deleting buckets that have been inaccessible (default: 168h = 7 days)
+  delete_threshold: "168h"  
+  # Maximum retries for bucket accessibility checks (default: 3)
+  max_retries: 3
 
-# Skip bucket validation (HeadBucket operation)
-# Set to true if your IAM user doesn't have s3:HeadBucket permission
-# Note: validation is automatically skipped when a single bucket is configured
-skip_bucket_validation: false
+# Logging
+# log_level: debug | info | warn | error
+log_level: info

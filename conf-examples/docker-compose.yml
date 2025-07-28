@@ -13,7 +13,7 @@ services:
         command: minio server /export --console-address 0.0.0.0:8080
 
     postgres:
-        image: postgres:15-alpine
+        image: postgres:17-alpine
         container_name: s3xplorer-postgres
         environment:
             POSTGRES_DB: s3xplorer
