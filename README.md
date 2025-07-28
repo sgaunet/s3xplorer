@@ -15,6 +15,24 @@ In the beginning, this project was a POC to play with AWS golang SDK v2 and the 
 
 ![s3xplorer](img/v0.1.0.png)
 
+## Major Changes in v0.5.0
+
+Starting with version 0.5.0, s3xplorer introduces a major architectural change to significantly improve performance:
+
+### PostgreSQL Backend
+- **Database-driven UI**: The web interface now reads from a PostgreSQL database instead of making direct S3 API calls
+- **Background synchronization**: A background scanner periodically syncs S3 bucket contents to the database
+- **Massive performance improvement**: Browsing large buckets is now instant, as data is served from the local database
+- **Scheduled scanning**: Configure cron-based schedules for automatic bucket synchronization
+- **Deletion tracking**: Optionally sync deletions to keep the database in sync with S3
+
+### Migration Notes
+- **Database required**: PostgreSQL is now required for the application to function
+- **Configuration changes**: Update your configuration files to the new hierarchical format (see examples below)
+- **First scan**: The initial scan may take time depending on bucket size, but subsequent access will be fast
+
+See the configuration examples below for setting up the database and background scanning features.
+
 ## Install
 
 * Use the binary in the release page
@@ -68,20 +86,45 @@ helm search repo s3xplorer
 Example with a local minio server:
 
 ```yaml
-# set s3endpoint and s3region if SSO is not used
-s3endpoint: http://127.0.0.1:9090
-s3region: "us-east-1"
-# accesskey and apikey are mandatory if SSO is not used
-accesskey: minioadminn
-apikey: minioadminn
-awsssoprofile: 
-bucket: example
-# set the prefix if you want to restrict the access to a specific folder
-# don't forget to add the trailing slash at the end
-prefix: rando/
+# S3 Configuration
+s3:
+  # set endpoint and region if SSO is not used
+  endpoint: http://127.0.0.1:9090
+  region: "us-east-1"
+  # access_key and api_key are mandatory if SSO is not used
+  access_key: minioadminn
+  api_key: minioadminn
+  sso_aws_profile: 
+  bucket: example
+  # set the prefix if you want to restrict the access to a specific folder
+  # don't forget to add the trailing slash at the end
+  prefix: rando/
+  # Glacier restore settings
+  restore_days: 1
+  enable_glacier_restore: false
+  skip_bucket_validation: false
 
-# loglevel: debug | info | warn | error
-loglevel: info
+# Database Configuration (optional - for PostgreSQL backend)
+database:
+  url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
+
+# Background Scanning Configuration (optional - requires database)
+scan:
+  enable_background_scan: true
+  cron_schedule: "0 2 * * *"  # daily at 2 AM
+  enable_initial_scan: false
+  enable_deletion_sync: true
+
+# Bucket Sync Configuration (optional)
+bucket_sync:
+  enable: true
+  sync_threshold: "24h"
+  delete_threshold: "168h"
+  max_retries: 3
+
+# Logging
+# log_level: debug | info | warn | error
+log_level: info
 ```
 
 ## Configuration with AWS SSO (not recommmended)
@@ -89,23 +132,29 @@ loglevel: info
 Example:
 
 ```yaml
-s3endpoint:
-s3region: "eu-west-3"
-accesskey: 
-apikey: 
-ssoawsprofile: dev
-bucket: my-bucket
-prefix: ""
+# S3 Configuration
+s3:
+  endpoint:
+  region: "eu-west-3"
+  access_key: 
+  api_key: 
+  sso_aws_profile: dev
+  bucket: my-bucket
+  prefix: ""
+  # Number of days that objects will be restored from Glacier (default: 2 if not specified)
+  restore_days: 7
+  # Whether to enable the Glacier restore button (default: false if not specified)
+  # If set to false, the restore button will not be shown for archived objects
+  enable_glacier_restore: true
+  skip_bucket_validation: false
 
-# loglevel: debug | info | warn | error
-loglevel: info
+# Database Configuration (optional)
+database:
+  url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 
-# Number of days that objects will be restored from Glacier (default: 2 if not specified)
-# restoredays: 7
-
-# Whether to enable the Glacier restore button (default: false if not specified)
-# If set to false, the restore button will not be shown for archived objects
-enableglacierrestore: true
+# Logging
+# log_level: debug | info | warn | error
+log_level: info
 ```
 
 To use AWS SSO, you need to have the AWS CLI installed and configured with the SSO profile.
