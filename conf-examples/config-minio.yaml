@@ -1,21 +1,56 @@
-# set s3endpoint and s3region if SSO is not used
-s3endpoint: http://127.0.0.1:9090
-s3region: "us-east-1"
-# accesskey and apikey are mandatory if SSO is not used
-accesskey: minioadminn
-apikey: minioadminn
-awsssoprofile: 
-bucket: example
-# set the prefix if you want to restrict the access to a specific folder
-# don't forget to add the trailing slash at the end
-prefix: rando/
+# S3 Configuration
+s3:
+  # set endpoint and region if SSO is not used
+  endpoint: http://127.0.0.1:9090
+  region: "us-east-1"
+  # access_key and api_key are mandatory if SSO is not used
+  access_key: minioadminn
+  api_key: minioadminn
+  sso_aws_profile: 
+  bucket: example
+  # set the prefix if you want to restrict the access to a specific folder
+  # don't forget to add the trailing slash at the end
+  prefix: rando/
+  # Number of days that objects will be restored from Glacier (default: 2 if not specified)
+  restore_days: 7
+  # Whether to enable the Glacier restore button (default: false if not specified)
+  # If set to false, the restore button will not be shown for archived objects
+  enable_glacier_restore: true
+  # Skip bucket validation (HeadBucket operation)
+  skip_bucket_validation: false
 
-# loglevel: debug | info | warn | error
-loglevel: info
+# Database Configuration
+database:
+  url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 
-# Number of days that objects will be restored from Glacier (default: 2 if not specified)
-# restoredays: 7
+# Background Scanning Configuration
+scan:
+  enable_background_scan: true
+  # Cron schedule for scanning (default: "0 0 2 * * *" - daily at 2 AM)
+  # Format: second minute hour day month weekday
+  # Examples:
+  # "0 2 * * *"     - daily at 2 AM
+  # "0 */6 * * *"   - every 6 hours
+  # "0 0 * * 0"     - weekly on Sunday at midnight
+  cron_schedule: "0 2 * * *"
+  # Initial Scan Configuration
+  # Whether to perform a full scan of all buckets on application startup
+  # This populates the database with current S3 data before starting the web server
+  enable_initial_scan: true
+  # Deletion sync configuration
+  enable_deletion_sync: true
 
-# Whether to enable the Glacier restore button (default: false if not specified)
-# If set to false, the restore button will not be shown for archived objects
-enableglacierrestore: true
+# Bucket Sync Configuration
+# When enabled, validates bucket accessibility and removes inaccessible buckets
+bucket_sync:
+  enable: true
+  # Time threshold for marking buckets as inaccessible (default: 24h)
+  sync_threshold: "24h"
+  # Time threshold for deleting buckets that have been inaccessible (default: 168h = 7 days)
+  delete_threshold: "168h"  
+  # Maximum retries for bucket accessibility checks (default: 3)
+  max_retries: 3
+
+# Logging
+# log_level: debug | info | warn | error
+log_level: debug

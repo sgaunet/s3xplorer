@@ -27,7 +27,7 @@ templ MenuWithConfig(cfg config.Config) {
       <ul>
         <li><a href="/">index</a></li>
         <li><a href="/search">search</a></li>
-        if !cfg.BucketLocked {
+        if !cfg.S3.BucketLocked {
           <li><a href="/buckets">change bucket</a></li>
         }
       </ul>

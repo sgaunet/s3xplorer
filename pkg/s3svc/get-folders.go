@@ -20,7 +20,7 @@ func (s *Service) GetFolders(ctx context.Context, parentFolder string) ([]dto.S3
 	result := []dto.S3Object{}
 
 	paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
-		Bucket:    aws.String(s.cfg.Bucket),
+		Bucket:    aws.String(s.cfg.S3.Bucket),
 		Prefix:    aws.String(parentFolder),
 		Delimiter: aws.String(delimeter),
 	})

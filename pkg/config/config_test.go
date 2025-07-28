@@ -24,7 +24,7 @@ s3region: us-west-2
 ssoawsprofile: test-profile
 bucket: test-bucket
 prefix: test-prefix
-loglevel: debug
+log_level: debug
 restoredays: 5
 enableglacierrestore: true
 `
@@ -35,17 +35,17 @@ enableglacierrestore: true
 	cfg, err := config.ReadYamlCnxFile(tmpFile)
 	require.NoError(t, err, "ReadYamlCnxFile should not return an error for valid YAML")
 
-	// Verify all fields are correctly unmarshaled
-	assert.Equal(t, "https://s3.example.com", cfg.S3endpoint)
-	assert.Equal(t, "test-access-key", cfg.S3accessKey)
-	assert.Equal(t, "test-api-key", cfg.S3ApikKey)
-	assert.Equal(t, "us-west-2", cfg.S3Region)
-	assert.Equal(t, "test-profile", cfg.SsoAwsProfile)
-	assert.Equal(t, "test-bucket", cfg.Bucket)
-	assert.Equal(t, "test-prefix", cfg.Prefix)
+	// Verify all fields are correctly unmarshaled (test legacy migration)
+	assert.Equal(t, "https://s3.example.com", cfg.S3.Endpoint)
+	assert.Equal(t, "test-access-key", cfg.S3.AccessKey)
+	assert.Equal(t, "test-api-key", cfg.S3.APIKey)
+	assert.Equal(t, "us-west-2", cfg.S3.Region)
+	assert.Equal(t, "test-profile", cfg.S3.SsoAwsProfile)
+	assert.Equal(t, "test-bucket", cfg.S3.Bucket)
+	assert.Equal(t, "test-prefix", cfg.S3.Prefix)
 	assert.Equal(t, "debug", cfg.LogLevel)
-	assert.Equal(t, 5, cfg.RestoreDays)
-	assert.Equal(t, true, cfg.EnableGlacierRestore)
+	assert.Equal(t, 5, cfg.S3.RestoreDays)
+	assert.Equal(t, true, cfg.S3.EnableGlacierRestore)
 }
 
 func TestReadYamlCnxFile_InvalidYaml(t *testing.T) {
@@ -91,17 +91,23 @@ func TestReadYamlCnxFile_EmptyFile(t *testing.T) {
 	cfg, err := config.ReadYamlCnxFile(tmpFile)
 	assert.NoError(t, err, "ReadYamlCnxFile should not return an error for empty file")
 	
-	// Verify default values (all should be zero values)
-	assert.Equal(t, "", cfg.S3endpoint)
-	assert.Equal(t, "", cfg.S3accessKey)
-	assert.Equal(t, "", cfg.S3ApikKey)
-	assert.Equal(t, "", cfg.S3Region)
-	assert.Equal(t, "", cfg.SsoAwsProfile)
-	assert.Equal(t, "", cfg.Bucket)
-	assert.Equal(t, "", cfg.Prefix)
+	// Verify default values (all should be zero values except for defaults)
+	assert.Equal(t, "", cfg.S3.Endpoint)
+	assert.Equal(t, "", cfg.S3.AccessKey)
+	assert.Equal(t, "", cfg.S3.APIKey)
+	assert.Equal(t, "", cfg.S3.Region)
+	assert.Equal(t, "", cfg.S3.SsoAwsProfile)
+	assert.Equal(t, "", cfg.S3.Bucket)
+	assert.Equal(t, "", cfg.S3.Prefix)
 	assert.Equal(t, "", cfg.LogLevel)
-	assert.Equal(t, 0, cfg.RestoreDays)
-	assert.Equal(t, false, cfg.EnableGlacierRestore)
+	assert.Equal(t, 0, cfg.S3.RestoreDays)
+	assert.Equal(t, false, cfg.S3.EnableGlacierRestore)
+	// Check defaults
+	assert.Equal(t, "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable", cfg.Database.URL)
+	assert.Equal(t, "0 0 2 * * *", cfg.Scan.CronSchedule)
+	assert.Equal(t, "24h", cfg.BucketSync.SyncThreshold)
+	assert.Equal(t, "168h", cfg.BucketSync.DeleteThreshold)
+	assert.Equal(t, 3, cfg.BucketSync.MaxRetries)
 }
 
 func TestReadYamlCnxFile_PartialConfig(t *testing.T) {
@@ -121,15 +127,85 @@ restoredays: 7
 	cfg, err := config.ReadYamlCnxFile(tmpFile)
 	require.NoError(t, err, "ReadYamlCnxFile should not return an error for partial config")
 
-	// Verify specified fields are set and others have zero values
-	assert.Equal(t, "https://s3.example.com", cfg.S3endpoint)
-	assert.Equal(t, "", cfg.S3accessKey)
-	assert.Equal(t, "", cfg.S3ApikKey)
-	assert.Equal(t, "", cfg.S3Region)
-	assert.Equal(t, "", cfg.SsoAwsProfile)
-	assert.Equal(t, "test-bucket", cfg.Bucket)
-	assert.Equal(t, "", cfg.Prefix)
+	// Verify specified fields are set and others have zero values (test legacy migration)
+	assert.Equal(t, "https://s3.example.com", cfg.S3.Endpoint)
+	assert.Equal(t, "", cfg.S3.AccessKey)
+	assert.Equal(t, "", cfg.S3.APIKey)
+	assert.Equal(t, "", cfg.S3.Region)
+	assert.Equal(t, "", cfg.S3.SsoAwsProfile)
+	assert.Equal(t, "test-bucket", cfg.S3.Bucket)
+	assert.Equal(t, "", cfg.S3.Prefix)
 	assert.Equal(t, "", cfg.LogLevel)
-	assert.Equal(t, 7, cfg.RestoreDays)
-	assert.Equal(t, false, cfg.EnableGlacierRestore)
+	assert.Equal(t, 7, cfg.S3.RestoreDays)
+	assert.Equal(t, false, cfg.S3.EnableGlacierRestore)
+}
+
+func TestReadYamlCnxFile_NewHierarchicalFormat(t *testing.T) {
+	// Create a temporary test file with new hierarchical format
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "hierarchical_config.yaml")
+
+	hierarchicalYaml := `
+s3:
+  endpoint: https://s3.example.com
+  access_key: test-access-key
+  api_key: test-api-key
+  region: us-west-2
+  sso_aws_profile: test-profile
+  bucket: test-bucket
+  prefix: test-prefix
+  restore_days: 5
+  enable_glacier_restore: true
+  skip_bucket_validation: true
+database:
+  url: postgres://custom@localhost:5432/mydb
+scan:
+  enable_background_scan: true
+  cron_schedule: "0 */6 * * *"
+  enable_initial_scan: true
+  enable_deletion_sync: true
+bucket_sync:
+  enable: true
+  sync_threshold: "12h"
+  delete_threshold: "48h"
+  max_retries: 5
+log_level: debug
+`
+	err := os.WriteFile(tmpFile, []byte(hierarchicalYaml), 0644)
+	require.NoError(t, err, "Failed to create test file")
+
+	// Test reading the file
+	cfg, err := config.ReadYamlCnxFile(tmpFile)
+	require.NoError(t, err, "ReadYamlCnxFile should not return an error for hierarchical config")
+
+	// Verify S3 config
+	assert.Equal(t, "https://s3.example.com", cfg.S3.Endpoint)
+	assert.Equal(t, "test-access-key", cfg.S3.AccessKey)
+	assert.Equal(t, "test-api-key", cfg.S3.APIKey)
+	assert.Equal(t, "us-west-2", cfg.S3.Region)
+	assert.Equal(t, "test-profile", cfg.S3.SsoAwsProfile)
+	assert.Equal(t, "test-bucket", cfg.S3.Bucket)
+	assert.Equal(t, "test-prefix", cfg.S3.Prefix)
+	assert.Equal(t, 5, cfg.S3.RestoreDays)
+	assert.Equal(t, true, cfg.S3.EnableGlacierRestore)
+	assert.Equal(t, true, cfg.S3.SkipBucketValidation)
+	assert.Equal(t, true, cfg.S3.BucketLocked)
+	
+	// Verify Database config
+	assert.Equal(t, "postgres://custom@localhost:5432/mydb", cfg.Database.URL)
+	
+	// Verify Scan config
+	assert.Equal(t, true, cfg.Scan.EnableBackgroundScan)
+	assert.Equal(t, "0 */6 * * *", cfg.Scan.CronSchedule)
+	assert.Equal(t, true, cfg.Scan.EnableInitialScan)
+	assert.Equal(t, true, cfg.Scan.EnableDeletionSync)
+	
+	// Verify BucketSync config
+	assert.Equal(t, true, cfg.BucketSync.Enable)
+	assert.Equal(t, "12h", cfg.BucketSync.SyncThreshold)
+	assert.Equal(t, "48h", cfg.BucketSync.DeleteThreshold)
+	assert.Equal(t, 5, cfg.BucketSync.MaxRetries)
+	
+	// Verify LogLevel
+	assert.Equal(t, "debug", cfg.LogLevel)
 }

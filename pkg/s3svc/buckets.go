@@ -37,18 +37,18 @@ func (s *Service) ListBuckets(ctx context.Context) ([]dto.Bucket, error) {
 func (s *Service) IsBucketEmpty(ctx context.Context) (bool, error) {
 	var maxKeys int32 = 1
 	input := &s3.ListObjectsV2Input{
-		Bucket:  &s.cfg.Bucket,
+		Bucket:  &s.cfg.S3.Bucket,
 		MaxKeys: &maxKeys,
 	}
 
-	if s.cfg.Prefix != "" {
-		input.Prefix = &s.cfg.Prefix
+	if s.cfg.S3.Prefix != "" {
+		input.Prefix = &s.cfg.S3.Prefix
 	}
 
 	result, err := s.awsS3Client.ListObjectsV2(ctx, input)
 	if err != nil {
 		s.log.Error("Failed to check if bucket is empty",
-			slog.String("bucket", s.cfg.Bucket),
+			slog.String("bucket", s.cfg.S3.Bucket),
 			slog.String("error", err.Error()))
 		return false, fmt.Errorf("failed to check if bucket is empty: %w", err)
 	}
@@ -59,14 +59,14 @@ func (s *Service) IsBucketEmpty(ctx context.Context) (bool, error) {
 // SwitchBucket updates the current bucket in the service configuration.
 func (s *Service) SwitchBucket(bucketName string) {
 	s.log.Info("Switching bucket", 
-		slog.String("from", s.cfg.Bucket), 
+		slog.String("from", s.cfg.S3.Bucket), 
 		slog.String("to", bucketName))
-	s.cfg.Bucket = bucketName
+	s.cfg.S3.Bucket = bucketName
 	// Reset prefix when switching buckets
-	s.cfg.Prefix = ""
+	s.cfg.S3.Prefix = ""
 }
 
 // GetBucketName returns the current bucket name.
 func (s *Service) GetBucketName() string {
-	return s.cfg.Bucket
+	return s.cfg.S3.Bucket
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,42 +12,35 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	_ "github.com/lib/pq"
 	"github.com/sgaunet/s3xplorer/pkg/app"
 	configapp "github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dbinit"
+	"github.com/sgaunet/s3xplorer/pkg/dbsvc"
+	"github.com/sgaunet/s3xplorer/pkg/scanner"
+	"github.com/sgaunet/s3xplorer/pkg/scheduler"
 )
 
-// Package-level error variables.
-var (
-	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration.
-	errNoAwsConfigMethod = errors.New("no method to initialize aws.Config")
-)
+//go:generate go tool github.com/sqlc-dev/sqlc/cmd/sqlc generate -f sqlc.yaml
+
+// ErrConfigFileNotProvided is returned when no configuration file is provided.
+var ErrConfigFileNotProvided = errors.New("configuration file not provided")
 
 func main() {
-	var err error
-	var fileName string
-	var cfg configapp.Config
-	flag.StringVar(&fileName, "f", "", "Configuration file")
-	flag.Parse()
-
-	// Check if the configuration file is provided
-	if fileName == "" {
-		fmt.Fprintf(os.Stderr, "Configuration file not provided. Exit 1")
-		fmt.Fprintf(os.Stderr, "\nUsage:\n")
-		flag.PrintDefaults()
+	// Parse configuration
+	cfg, err := parseConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	// Read the configuration file
-	if cfg, err = configapp.ReadYamlCnxFile(fileName); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading configuration file: %s\n", err.Error())
-		os.Exit(1)
-	}
 	// Initialize the logger
 	l := initTrace(cfg.LogLevel)
 
@@ -54,19 +48,104 @@ func main() {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	SetupCloseHandler(ctx, cancelFunc, l)
 
-	// initialize the S3 client
-	s3Client, err := initS3Client(ctx, cfg)
+	// Initialize infrastructure
+	s3Client, dbConn, err := initInfrastructure(ctx, cfg, l)
 	if err != nil {
-		l.Error("error initializing the S3 client: %s", slog.String("error", err.Error()))
+		l.Error("Failed to initialize infrastructure", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	defer func() {
+		if err := dbConn.Close(); err != nil {
+			l.Error("Failed to close database connection", slog.String("error", err.Error()))
+		}
+	}()
 
-	// Create the app
-	s := app.NewApp(cfg, s3Client)
+	// Initialize and start services
+	dbService, scannerService, scheduler := initServices(cfg, s3Client, dbConn, l)
+	performInitialScan(ctx, cfg, scannerService, l)
+
+	if err := scheduler.Start(ctx); err != nil {
+		l.Error("error starting scheduler", slog.String("error", err.Error()))
+		return
+	}
+
+	// Create and run the app
+	s := app.NewApp(cfg, s3Client, dbService)
 	s.SetLogger(l)
 
+	// Wait for shutdown signal
 	<-ctx.Done()
+	shutdown(s, scheduler, l)
+}
+
+// parseConfig parses command line flags and reads the configuration file.
+func parseConfig() (configapp.Config, error) {
+	var fileName string
+	flag.StringVar(&fileName, "f", "", "Configuration file")
+	flag.Parse()
+
+	if fileName == "" {
+		flag.Usage()
+		return configapp.Config{}, ErrConfigFileNotProvided
+	}
+
+	cfg, err := configapp.ReadYamlCnxFile(fileName)
+	if err != nil {
+		return configapp.Config{}, fmt.Errorf("error reading configuration file: %w", err)
+	}
+	return cfg, nil
+}
+
+// initInfrastructure initializes S3 client and database connection.
+func initInfrastructure(ctx context.Context, cfg configapp.Config, l *slog.Logger) (*s3.Client, *sql.DB, error) {
+	s3Client, err := initS3Client(ctx, cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error initializing S3 client: %w", err)
+	}
+
+	dbConn, err := dbinit.InitializeDatabase(ctx, cfg.Database.URL, l)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error initializing database: %w", err)
+	}
+
+	return s3Client, dbConn, nil
+}
+
+// initServices creates and configures all services.
+func initServices(
+	cfg configapp.Config, s3Client *s3.Client, dbConn *sql.DB, l *slog.Logger,
+) (*dbsvc.Service, *scanner.Service, *scheduler.Scheduler) {
+	dbService := dbsvc.NewService(cfg, dbConn)
+	dbService.SetLogger(l)
+
+	scannerService := scanner.NewService(cfg, s3Client, dbConn)
+	scannerService.SetLogger(l)
+
+	scheduler := scheduler.NewScheduler(cfg, dbConn, scannerService)
+	scheduler.SetLogger(l)
+
+	return dbService, scannerService, scheduler
+}
+
+// performInitialScan runs the initial bucket scan if enabled.
+func performInitialScan(ctx context.Context, cfg configapp.Config, scannerService *scanner.Service, l *slog.Logger) {
+	if !cfg.Scan.EnableInitialScan {
+		return
+	}
+
+	l.Info("Performing initial bucket scan")
+	if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
+		l.Error("error during initial scan", slog.String("error", err.Error()))
+		// Don't exit - continue with application startup even if initial scan fails
+	} else {
+		l.Info("Initial bucket scan completed successfully")
+	}
+}
+
+// shutdown handles graceful shutdown of services.
+func shutdown(s *app.App, scheduler *scheduler.Scheduler, l *slog.Logger) {
 	l.Info("stop the server")
+	scheduler.Stop()
 	if err := s.StopServer(); err != nil {
 		l.Error("error stopping server", slog.String("error", err.Error()))
 	}
@@ -121,18 +200,30 @@ func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, 
 	}
 
 	// Apply additional S3-specific options if using a custom endpoint
-	if configApp.S3endpoint != "" {
+	if configApp.S3.Endpoint != "" {
+		// Check if this is an AWS S3 endpoint (contains amazonaws.com)
+		isAwsEndpoint := strings.Contains(configApp.S3.Endpoint, "amazonaws.com")
+		usePathStyle := !isAwsEndpoint
+
+		// fmt.Printf("Custom endpoint detected - AWS: %t, UsePathStyle: %t\n", isAwsEndpoint, usePathStyle)
+
 		// Use functional options pattern to configure the S3 client
 		return s3.NewFromConfig(cfg, func(o *s3.Options) {
 			// Set the custom endpoint URL
-			o.BaseEndpoint = aws.String(configApp.S3endpoint)
-			// Use path-style addressing (bucket name in the URL path)
-			o.UsePathStyle = true
+			o.BaseEndpoint = aws.String(configApp.S3.Endpoint)
+			// Use path-style addressing only for non-AWS endpoints (like MinIO)
+			// AWS S3 should use virtual-hosted-style (UsePathStyle = false)
+			o.UsePathStyle = usePathStyle
+			// Ensure region is set correctly for both AWS and custom endpoints
+			o.Region = configApp.S3.Region
 		}), nil
 	}
 
 	// Standard AWS S3 client configuration
-	return s3.NewFromConfig(cfg), nil
+	// For AWS S3, we need to ensure the region is properly set
+	return s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.Region = configApp.S3.Region
+	}), nil
 }
 
 // GetAwsConfig returns an aws.Config based on the provided configuration.
@@ -140,19 +231,19 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 	// Initialize an empty config
 	var cfg aws.Config
 
-	if cfgApp.S3endpoint != "" {
+	if cfgApp.S3.Endpoint != "" {
 		// Parse the endpoint URL for validation
-		_, err := url.Parse(cfgApp.S3endpoint)
+		_, err := url.Parse(cfgApp.S3.Endpoint)
 		if err != nil {
 			return aws.Config{}, fmt.Errorf("invalid S3 endpoint URL: %w", err)
 		}
 
 		// Load basic configuration with region & credentials
 		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(cfgApp.S3Region),
+			config.WithRegion(cfgApp.S3.Region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				cfgApp.S3accessKey,
-				cfgApp.S3ApikKey,
+				cfgApp.S3.AccessKey,
+				cfgApp.S3.APIKey,
 				"",
 			)),
 		)
@@ -164,7 +255,7 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		// This is handled in the NewApp > initS3Client function, which calls:
 		// s3.NewFromConfig(cfg) which gets this config
 		// The s3.NewFromConfig will apply the custom endpoint when creating the client
-		
+
 		// Note: We're intentionally not using the deprecated endpoint resolvers here
 		// When we create the S3 client, we'll use:
 		// s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -176,8 +267,8 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		return cfg, nil
 	}
 
-	if cfgApp.SsoAwsProfile != "" {
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.SsoAwsProfile))
+	if cfgApp.S3.SsoAwsProfile != "" {
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.S3.SsoAwsProfile))
 		if err != nil {
 			// s.log.Error("Error loading SSO profile", slog.String("error", err.Error()))
 			return cfg, fmt.Errorf("error loading SSO profile: %w", err)
@@ -186,13 +277,34 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		return cfg, nil
 	}
 
-	if cfgApp.S3accessKey != "" && cfgApp.S3ApikKey != "" {
-		cfg, err := config.LoadDefaultConfig(ctx)
+	if cfgApp.S3.AccessKey != "" && cfgApp.S3.APIKey != "" {
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithRegion(cfgApp.S3.Region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				cfgApp.S3.AccessKey,
+				cfgApp.S3.APIKey,
+				"",
+			)),
+		)
 		if err != nil {
 			return cfg, fmt.Errorf("error loading default config: %w", err)
 		}
-		// s.log.Debug("Default config loaded")
+		// s.log.Debug("Default config loaded with static credentials")
 		return cfg, nil
 	}
-	return cfg, errNoAwsConfigMethod
+
+	// Fall back to default credential chain (includes EC2 IAM role)
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(cfgApp.S3.Region),
+	)
+	if err != nil {
+		return cfg, fmt.Errorf("error loading default config: %w", err)
+	}
+	// This will use the default credential chain:
+	// 1. Environment variables
+	// 2. Shared credentials file
+	// 3. EC2 IAM role
+	// 4. ECS task role
+	// 5. etc.
+	return cfg, nil
 }

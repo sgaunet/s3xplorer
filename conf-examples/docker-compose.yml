@@ -1,4 +1,4 @@
-version: '3.7'
+
 services:
     minio-server:
         image: minio/minio:RELEASE.2024-11-07T00-52-20Z-cpuv1
@@ -11,3 +11,20 @@ services:
         volumes:
             - ./data:/export
         command: minio server /export --console-address 0.0.0.0:8080
+
+    postgres:
+        image: postgres:17-alpine
+        container_name: s3xplorer-postgres
+        environment:
+            POSTGRES_DB: s3xplorer
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+        ports:
+            - "5432:5432"
+        volumes:
+            - ./postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
