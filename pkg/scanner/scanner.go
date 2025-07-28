@@ -117,7 +117,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	s.log.Info("Starting bucket scan", slog.String("bucket", bucketName))
 
 	// First, validate bucket accessibility before proceeding (unless skipped)
-	if !s.cfg.SkipBucketValidation {
+	if !s.cfg.S3.SkipBucketValidation {
 		if err := s.validateBucketAccessibility(ctx, bucketName); err != nil {
 			errorType := s.classifyBucketError(err)
 			s.log.Error("Bucket accessibility check failed",
@@ -130,7 +130,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 				// Create or get bucket record to mark it as inaccessible
 				bucket, bucketErr := s.queries.CreateBucket(ctx, database.CreateBucketParams{
 					Name:   bucketName,
-					Region: sql.NullString{String: s.cfg.S3Region, Valid: s.cfg.S3Region != ""},
+					Region: sql.NullString{String: s.cfg.S3.Region, Valid: s.cfg.S3.Region != ""},
 				})
 				if bucketErr == nil {
 					// Mark bucket for deletion and update access error
@@ -166,7 +166,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	// Create or get bucket record
 	bucket, err := s.queries.CreateBucket(ctx, database.CreateBucketParams{
 		Name:   bucketName,
-		Region: sql.NullString{String: s.cfg.S3Region, Valid: s.cfg.S3Region != ""},
+		Region: sql.NullString{String: s.cfg.S3.Region, Valid: s.cfg.S3.Region != ""},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create/get bucket: %w", err)
@@ -201,7 +201,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	var scanErr error
 
 	// Phase 1: Mark all existing objects as potentially deleted (if deletion sync is enabled)
-	if s.cfg.EnableDeletionSync {
+	if s.cfg.Scan.EnableDeletionSync {
 		s.log.Info("Phase 1: Marking all objects for deletion check", slog.String("bucket", bucketName))
 		if err := s.queries.MarkAllObjectsForDeletion(ctx, bucket.ID); err != nil {
 			scanErr = fmt.Errorf("failed to mark objects for deletion: %w", err)
@@ -258,7 +258,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	// Use ListObjectsV2 to get all objects
 	paginator := s3.NewListObjectsV2Paginator(s.s3Client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
-		Prefix: aws.String(s.cfg.Prefix),
+		Prefix: aws.String(s.cfg.S3.Prefix),
 	})
 
 	for paginator.HasMorePages() {
@@ -318,7 +318,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	}
 
 	// Phase 3: Delete objects that are still marked for deletion (if deletion sync is enabled)
-	if s.cfg.EnableDeletionSync {
+	if s.cfg.Scan.EnableDeletionSync {
 		s.log.Info("Phase 3: Cleaning up deleted objects", slog.String("bucket", bucketName))
 		markedCount, err := s.queries.CountMarkedObjects(ctx, bucket.ID)
 		if err != nil {
@@ -406,7 +406,7 @@ func (s *Service) processObject(ctx context.Context, bucketID int32, obj types.O
 	}
 
 	// Unmark the object for deletion since we found it in S3 (if deletion sync is enabled)
-	if s.cfg.EnableDeletionSync {
+	if s.cfg.Scan.EnableDeletionSync {
 		if err := s.queries.UnmarkObjectForDeletion(ctx, database.UnmarkObjectForDeletionParams{
 			BucketID: bucketID,
 			Key:      key,
@@ -509,7 +509,7 @@ func (s *Service) processFolder(ctx context.Context, bucketID int32, folderPrefi
 	}
 
 	// Unmark the folder for deletion since we found it in S3 (if deletion sync is enabled)
-	if s.cfg.EnableDeletionSync {
+	if s.cfg.Scan.EnableDeletionSync {
 		if err := s.queries.UnmarkObjectForDeletion(ctx, database.UnmarkObjectForDeletionParams{
 			BucketID: bucketID,
 			Key:      folderPrefix,
@@ -544,21 +544,21 @@ func (s *Service) DiscoverAndScanAllBuckets(ctx context.Context) error {
 	s.log.Info("Starting discovery and initial scan of all buckets")
 
 	// If a specific bucket is configured, only scan that bucket
-	if s.cfg.Bucket != "" {
-		s.log.Info("Scanning configured bucket", slog.String("bucket", s.cfg.Bucket))
+	if s.cfg.S3.Bucket != "" {
+		s.log.Info("Scanning configured bucket", slog.String("bucket", s.cfg.S3.Bucket))
 
 		// Perform bucket validation if enabled
-		if s.cfg.EnableBucketSync {
-			_, _, _, _, err := s.validateAndSyncBuckets(ctx, []string{s.cfg.Bucket})
+		if s.cfg.BucketSync.Enable {
+			_, _, _, _, err := s.validateAndSyncBuckets(ctx, []string{s.cfg.S3.Bucket})
 			if err != nil {
 				s.log.Error("Failed to validate configured bucket",
-					slog.String("bucket", s.cfg.Bucket),
+					slog.String("bucket", s.cfg.S3.Bucket),
 					slog.String("error", err.Error()))
 				// Continue with scan even if validation fails
 			}
 		}
 
-		return s.ScanBucket(ctx, s.cfg.Bucket)
+		return s.ScanBucket(ctx, s.cfg.S3.Bucket)
 	}
 
 	// Discover all available buckets
@@ -660,7 +660,7 @@ func (s *Service) validateBucketAccessibility(ctx context.Context, bucketName st
 
 // validateAndSyncBuckets performs bucket-level validation and synchronization
 func (s *Service) validateAndSyncBuckets(ctx context.Context, discoveredBuckets []string) (int, int, int, int, error) {
-	if !s.cfg.EnableBucketSync {
+	if !s.cfg.BucketSync.Enable {
 		s.log.Debug("Bucket sync disabled - skipping bucket validation")
 		return 0, 0, 0, 0, nil
 	}
@@ -695,14 +695,14 @@ func (s *Service) validateAndSyncBuckets(ctx context.Context, discoveredBuckets 
 
 		// Test accessibility with retries (unless validation is skipped)
 		var accessErr error
-		if !s.cfg.SkipBucketValidation {
-			for retry := 0; retry < s.cfg.BucketMaxRetries; retry++ {
+		if !s.cfg.S3.SkipBucketValidation {
+			for retry := 0; retry < s.cfg.BucketSync.MaxRetries; retry++ {
 				accessErr = s.validateBucketAccessibility(ctx, bucketName)
 				if accessErr == nil {
 					break
 				}
 
-				if retry < s.cfg.BucketMaxRetries-1 {
+				if retry < s.cfg.BucketSync.MaxRetries-1 {
 					s.log.Debug("Retrying bucket accessibility check",
 						slog.String("bucket", bucketName),
 						slog.Int("retry", retry+1))
@@ -740,10 +740,10 @@ func (s *Service) validateAndSyncBuckets(ctx context.Context, discoveredBuckets 
 	s.log.Debug("Phase 3: Cleaning up long-term inaccessible buckets")
 
 	// Parse deletion threshold
-	deleteThreshold, err := time.ParseDuration(s.cfg.BucketDeleteThreshold)
+	deleteThreshold, err := time.ParseDuration(s.cfg.BucketSync.DeleteThreshold)
 	if err != nil {
 		s.log.Error("Invalid bucket delete threshold",
-			slog.String("threshold", s.cfg.BucketDeleteThreshold),
+			slog.String("threshold", s.cfg.BucketSync.DeleteThreshold),
 			slog.String("error", err.Error()))
 		return bucketsValidated, bucketsMarkedInaccessible, bucketsCleanedUp, bucketValidationErrors, nil
 	}
@@ -867,10 +867,10 @@ func (s *Service) ScanAllBucketsWithTracking(ctx context.Context, buckets []stri
 
 // ScanConfiguredBucket scans only the bucket specified in configuration
 func (s *Service) ScanConfiguredBucket(ctx context.Context) error {
-	if s.cfg.Bucket == "" {
+	if s.cfg.S3.Bucket == "" {
 		return fmt.Errorf("no bucket configured for scanning")
 	}
 
-	s.log.Info("Scanning configured bucket", slog.String("bucket", s.cfg.Bucket))
-	return s.ScanBucket(ctx, s.cfg.Bucket)
+	s.log.Info("Scanning configured bucket", slog.String("bucket", s.cfg.S3.Bucket))
+	return s.ScanBucket(ctx, s.cfg.S3.Bucket)
 }

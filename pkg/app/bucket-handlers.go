@@ -12,10 +12,10 @@ func (s *App) BucketListingHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	
 	// Check if bucket changes are allowed
-	if s.cfg.BucketLocked {
+	if s.cfg.S3.BucketLocked {
 		// If bucket is locked (specified in config), don't allow bucket selection
 		s.log.Warn("Attempted to access bucket selection when bucket is locked in config", 
-			slog.String("current", s.cfg.Bucket))
+			slog.String("current", s.cfg.S3.Bucket))
 		
 		// Render an error page explaining that bucket is locked
 		errMsg := "Bucket changes are not permitted when a bucket is explicitly defined in configuration. " +

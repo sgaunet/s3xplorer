@@ -38,15 +38,15 @@ func (s *Scheduler) SetLogger(log *slog.Logger) {
 
 // Start starts the scheduler and adds the scan job
 func (s *Scheduler) Start(ctx context.Context) error {
-	if !s.cfg.EnableBackgroundScan {
+	if !s.cfg.Scan.EnableBackgroundScan {
 		s.log.Info("Background scanning is disabled")
 		return nil
 	}
 
 	// Add the scanning job
-	_, err := s.cron.AddFunc(s.cfg.ScanCronSchedule, func() {
+	_, err := s.cron.AddFunc(s.cfg.Scan.CronSchedule, func() {
 		s.log.Info("Starting scheduled S3 scan")
-		if err := s.scanner.ScanBucket(ctx, s.cfg.Bucket); err != nil {
+		if err := s.scanner.ScanBucket(ctx, s.cfg.S3.Bucket); err != nil {
 			s.log.Error("Scheduled scan failed", slog.String("error", err.Error()))
 		} else {
 			s.log.Info("Scheduled scan completed successfully")
@@ -56,7 +56,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		return err
 	}
 
-	s.log.Info("Starting scheduler", slog.String("schedule", s.cfg.ScanCronSchedule))
+	s.log.Info("Starting scheduler", slog.String("schedule", s.cfg.Scan.CronSchedule))
 	s.cron.Start()
 	return nil
 }

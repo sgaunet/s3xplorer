@@ -8,7 +8,7 @@ tool (
 )
 
 require (
-	github.com/a-h/templ v0.3.906
+	github.com/a-h/templ v0.3.924
 	github.com/amacneil/dbmate/v2 v2.27.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.14

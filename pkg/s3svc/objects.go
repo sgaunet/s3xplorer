@@ -22,7 +22,7 @@ const DefaultRetentionPolicyInDays int32 = 2
 func (s *Service) IsDownloadable(ctx context.Context, key string) (bool, bool, error) {
 	var isDownloadable, isRestoring bool
 	hi := s3.HeadObjectInput{
-		Bucket: &s.cfg.Bucket,
+		Bucket: &s.cfg.S3.Bucket,
 		Key:    &key,
 	}
 	o, err := s.awsS3Client.HeadObject(ctx, &hi)
@@ -94,14 +94,14 @@ func (s *Service) RestoreObject(ctx context.Context, key string) error {
 	var restoreDays int32
 	// Check if the RestoreDays is within int32 bounds to prevent overflow
 	switch {
-	case s.cfg.RestoreDays <= 0:
+	case s.cfg.S3.RestoreDays <= 0:
 		restoreDays = DefaultRetentionPolicyInDays
 		s.log.Debug("Using default restore days", slog.Int("days", int(DefaultRetentionPolicyInDays)))
-	case s.cfg.RestoreDays > int(math.MaxInt32):
+	case s.cfg.S3.RestoreDays > int(math.MaxInt32):
 		// If RestoreDays exceeds int32 max value, use the maximum value
 		restoreDays = math.MaxInt32
 		s.log.Warn("RestoreDays exceeds maximum allowed value, capping at maximum", 
-			slog.Int("requested", s.cfg.RestoreDays), 
+			slog.Int("requested", s.cfg.S3.RestoreDays), 
 			slog.Int("maximum", int(math.MaxInt32)))
 	default:
 		// This case should only be reached when RestoreDays is greater than 0 and less than MaxInt32,
@@ -125,8 +125,8 @@ func (s *Service) RestoreObject(ctx context.Context, key string) error {
 		}
 		
 		// Convert using our safe function
-		restoreDays = safeInt32Conversion(s.cfg.RestoreDays)
-		s.log.Debug("Using configured restore days", slog.Int("days", s.cfg.RestoreDays))
+		restoreDays = safeInt32Conversion(s.cfg.S3.RestoreDays)
+		s.log.Debug("Using configured restore days", slog.Int("days", s.cfg.S3.RestoreDays))
 	}
 	
 	r := types.RestoreRequest{

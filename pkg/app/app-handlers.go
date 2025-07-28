@@ -35,10 +35,10 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 	}
 
 	// Check if bucket switching is allowed
-	if s.cfg.BucketLocked {
+	if s.cfg.S3.BucketLocked {
 		// If bucket is locked (specified in config), don't allow changes
 		s.log.Warn("Attempted to switch buckets when bucket is locked in config",
-			slog.String("current", s.cfg.Bucket),
+			slog.String("current", s.cfg.S3.Bucket),
 			slog.String("requested", switchBucket[0]))
 
 		// Render an error page explaining that bucket is locked
@@ -75,8 +75,8 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 	s.s3svc.SwitchBucket(newBucket)
 
 	// Also update the bucket in the App's config to ensure consistency
-	s.cfg.Bucket = newBucket
-	s.cfg.Prefix = ""
+	s.cfg.S3.Bucket = newBucket
+	s.cfg.S3.Prefix = ""
 
 	// Redirect to the root of the new bucket
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -86,15 +86,15 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 // checkEmptyBucket checks if the bucket is empty or needs redirection.
 func (s *App) checkEmptyBucket(ctx context.Context, w http.ResponseWriter, r *http.Request) bool {
 	// Check if the bucket is empty, if so redirect to bucket selection
-	if s.cfg.Bucket == "" {
+	if s.cfg.S3.Bucket == "" {
 		s.log.Info("No bucket configured, redirecting to bucket selection")
 		http.Redirect(w, r, "/buckets", http.StatusSeeOther)
 		return true // Handled with redirect
 	}
 
 	// Only check if bucket is empty when not using a prefix filter
-	if s.cfg.Prefix == "" {
-		count, err := s.dbsvc.CountObjects(ctx, s.cfg.Bucket, s.cfg.Prefix)
+	if s.cfg.S3.Prefix == "" {
+		count, err := s.dbsvc.CountObjects(ctx, s.cfg.S3.Bucket, s.cfg.S3.Prefix)
 		if err != nil {
 			s.log.Error("Error checking if bucket is empty", slog.String("error", err.Error()))
 			// Continue anyway, we'll show errors on the main page
@@ -103,7 +103,7 @@ func (s *App) checkEmptyBucket(ctx context.Context, w http.ResponseWriter, r *ht
 
 		if count == 0 {
 			s.log.Info("Bucket is empty, redirecting to bucket selection",
-				slog.String("bucket", s.cfg.Bucket))
+				slog.String("bucket", s.cfg.S3.Bucket))
 			http.Redirect(w, r, "/buckets", http.StatusSeeOther)
 			return true // Handled with redirect
 		}
@@ -115,7 +115,7 @@ func (s *App) checkEmptyBucket(ctx context.Context, w http.ResponseWriter, r *ht
 // getAndValidateFolder extracts and validates the folder parameter from the request.
 func (s *App) getAndValidateFolder(r *http.Request) string {
 	// Start with the configured prefix as default
-	folderPath := s.cfg.Prefix
+	folderPath := s.cfg.S3.Prefix
 
 	// Check if a folder parameter was provided
 	folder, ok := r.URL.Query()["folder"]
@@ -123,8 +123,8 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 		folderPath = folder[0]
 
 		// Ensure folder respects prefix restrictions if a prefix is set
-		if s.cfg.Prefix != "" && !strings.HasPrefix(folderPath, s.cfg.Prefix) {
-			folderPath = s.cfg.Prefix // Reset to prefix if validation fails
+		if s.cfg.S3.Prefix != "" && !strings.HasPrefix(folderPath, s.cfg.S3.Prefix) {
+			folderPath = s.cfg.S3.Prefix // Reset to prefix if validation fails
 		}
 	}
 
@@ -135,7 +135,7 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 // loadAndRenderBucketContents fetches and renders the bucket contents using hierarchical navigation.
 func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
 	// Get direct children (immediate subfolders and files) using hierarchical navigation
-	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.Bucket, folderPath, 1000, 0)
+	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.S3.Bucket, folderPath, 1000, 0)
 	if err != nil {
 		s.log.Error("Error getting direct children", slog.String("error", err.Error()))
 		return fmt.Errorf("failed to get direct children: %w", err)
@@ -212,8 +212,8 @@ func (s *App) extractAndValidateKey(r *http.Request) (string, error) {
 	key := keys[0]
 
 	// Validate the key has the correct prefix if configured
-	if s.cfg.Prefix != "" && !strings.HasPrefix(key, s.cfg.Prefix) {
-		return "", fmt.Errorf("%w: does not have required prefix '%s'", ErrInvalidKey, s.cfg.Prefix)
+	if s.cfg.S3.Prefix != "" && !strings.HasPrefix(key, s.cfg.S3.Prefix) {
+		return "", fmt.Errorf("%w: does not have required prefix '%s'", ErrInvalidKey, s.cfg.S3.Prefix)
 	}
 
 	return key, nil
@@ -222,7 +222,7 @@ func (s *App) extractAndValidateKey(r *http.Request) (string, error) {
 // downloadS3Object downloads an object from S3 and streams it to the HTTP response.
 func (s *App) downloadS3Object(ctx context.Context, w http.ResponseWriter, key string) error {
 	p := s3.GetObjectInput{
-		Bucket: &s.cfg.Bucket,
+		Bucket: &s.cfg.S3.Bucket,
 		Key:    &key,
 	}
 
@@ -289,8 +289,8 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 	key := keys[0]
 	s.log.Debug("RestoreHandler", slog.String("key", key), slog.String("f", f))
 
-	if s.cfg.Prefix != "" {
-		if !strings.HasPrefix(key, s.cfg.Prefix) {
+	if s.cfg.S3.Prefix != "" {
+		if !strings.HasPrefix(key, s.cfg.S3.Prefix) {
 			s.log.Error("RestoreHandler: Invalid key")
 			if renderErr := views.RenderError("Invalid key").Render(r.Context(), w); renderErr != nil {
 				s.log.Error("Failed to render error page", slog.String("error", renderErr.Error()))

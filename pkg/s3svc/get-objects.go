@@ -19,7 +19,7 @@ func (s *Service) GetObjects(ctx context.Context, parentFolder string) ([]dto.S3
 	var delimeter = "/"
 
 	paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
-		Bucket:    aws.String(s.cfg.Bucket),
+		Bucket:    aws.String(s.cfg.S3.Bucket),
 		Prefix:    aws.String(prefix),
 		Delimiter: aws.String(delimeter),
 	})
@@ -67,7 +67,7 @@ func (s *Service) SearchObjects(ctx context.Context, prefix string, fileToSearch
 
 	for _, folder := range folders {
 		paginator := s3.NewListObjectsV2Paginator(s.awsS3Client, &s3.ListObjectsV2Input{
-			Bucket:    aws.String(s.cfg.Bucket),
+			Bucket:    aws.String(s.cfg.S3.Bucket),
 			Prefix:    aws.String(folder.Key),
 			Delimiter: aws.String(delimeter),
 		})

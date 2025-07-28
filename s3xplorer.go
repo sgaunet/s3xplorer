@@ -27,6 +27,8 @@ import (
 	"github.com/sgaunet/s3xplorer/pkg/scheduler"
 )
 
+//go:generate go tool github.com/sqlc-dev/sqlc/cmd/sqlc generate -f sqlc.yaml
+
 // Package-level error variables.
 var (
 	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration.
@@ -68,7 +70,7 @@ func main() {
 	}
 
 	// Initialize database with embedded migrations
-	dbConn, err := dbinit.InitializeDatabase(cfg.DatabaseURL, l)
+	dbConn, err := dbinit.InitializeDatabase(cfg.Database.URL, l)
 	if err != nil {
 		l.Error("error initializing database", slog.String("error", err.Error()))
 		os.Exit(1)
@@ -87,7 +89,7 @@ func main() {
 	scheduler.SetLogger(l)
 
 	// Perform initial scan if enabled
-	if cfg.EnableInitialScan {
+	if cfg.Scan.EnableInitialScan {
 		l.Info("Performing initial bucket scan")
 		if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
 			l.Error("error during initial scan", slog.String("error", err.Error()))
@@ -164,9 +166,9 @@ func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, 
 	}
 
 	// Apply additional S3-specific options if using a custom endpoint
-	if configApp.S3endpoint != "" {
+	if configApp.S3.Endpoint != "" {
 		// Check if this is an AWS S3 endpoint (contains amazonaws.com)
-		isAwsEndpoint := strings.Contains(configApp.S3endpoint, "amazonaws.com")
+		isAwsEndpoint := strings.Contains(configApp.S3.Endpoint, "amazonaws.com")
 		usePathStyle := !isAwsEndpoint
 
 		// fmt.Printf("Custom endpoint detected - AWS: %t, UsePathStyle: %t\n", isAwsEndpoint, usePathStyle)
@@ -174,19 +176,19 @@ func initS3Client(ctx context.Context, configApp configapp.Config) (*s3.Client, 
 		// Use functional options pattern to configure the S3 client
 		return s3.NewFromConfig(cfg, func(o *s3.Options) {
 			// Set the custom endpoint URL
-			o.BaseEndpoint = aws.String(configApp.S3endpoint)
+			o.BaseEndpoint = aws.String(configApp.S3.Endpoint)
 			// Use path-style addressing only for non-AWS endpoints (like MinIO)
 			// AWS S3 should use virtual-hosted-style (UsePathStyle = false)
 			o.UsePathStyle = usePathStyle
 			// Ensure region is set correctly for both AWS and custom endpoints
-			o.Region = configApp.S3Region
+			o.Region = configApp.S3.Region
 		}), nil
 	}
 
 	// Standard AWS S3 client configuration
 	// For AWS S3, we need to ensure the region is properly set
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.Region = configApp.S3Region
+		o.Region = configApp.S3.Region
 	}), nil
 }
 
@@ -195,19 +197,19 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 	// Initialize an empty config
 	var cfg aws.Config
 
-	if cfgApp.S3endpoint != "" {
+	if cfgApp.S3.Endpoint != "" {
 		// Parse the endpoint URL for validation
-		_, err := url.Parse(cfgApp.S3endpoint)
+		_, err := url.Parse(cfgApp.S3.Endpoint)
 		if err != nil {
 			return aws.Config{}, fmt.Errorf("invalid S3 endpoint URL: %w", err)
 		}
 
 		// Load basic configuration with region & credentials
 		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(cfgApp.S3Region),
+			config.WithRegion(cfgApp.S3.Region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				cfgApp.S3accessKey,
-				cfgApp.S3ApikKey,
+				cfgApp.S3.AccessKey,
+				cfgApp.S3.ApiKey,
 				"",
 			)),
 		)
@@ -231,8 +233,8 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		return cfg, nil
 	}
 
-	if cfgApp.SsoAwsProfile != "" {
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.SsoAwsProfile))
+	if cfgApp.S3.SsoAwsProfile != "" {
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithSharedConfigProfile(cfgApp.S3.SsoAwsProfile))
 		if err != nil {
 			// s.log.Error("Error loading SSO profile", slog.String("error", err.Error()))
 			return cfg, fmt.Errorf("error loading SSO profile: %w", err)
@@ -241,12 +243,12 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		return cfg, nil
 	}
 
-	if cfgApp.S3accessKey != "" && cfgApp.S3ApikKey != "" {
+	if cfgApp.S3.AccessKey != "" && cfgApp.S3.ApiKey != "" {
 		cfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(cfgApp.S3Region),
+			config.WithRegion(cfgApp.S3.Region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				cfgApp.S3accessKey,
-				cfgApp.S3ApikKey,
+				cfgApp.S3.AccessKey,
+				cfgApp.S3.ApiKey,
 				"",
 			)),
 		)
@@ -259,7 +261,7 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 
 	// Fall back to default credential chain (includes EC2 IAM role)
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(cfgApp.S3Region),
+		config.WithRegion(cfgApp.S3.Region),
 	)
 	if err != nil {
 		return cfg, fmt.Errorf("error loading default config: %w", err)

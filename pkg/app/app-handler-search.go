@@ -22,7 +22,7 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	s.log.Debug("SearchHandler", slog.String("searchFile", searchFile))
 
 	// Use PostgreSQL database service for search instead of direct S3 calls
-	objects, err := s.dbsvc.SearchObjects(r.Context(), s.cfg.Bucket, searchFile, 1000, 0)
+	objects, err := s.dbsvc.SearchObjects(r.Context(), s.cfg.S3.Bucket, searchFile, 1000, 0)
 	if err != nil {
 		s.log.Error("SearchHandler: error when called SearchObjects", slog.String("error", err.Error()))
 		if err := views.RenderError(err.Error()).Render(r.Context(), w); err != nil {
@@ -32,7 +32,7 @@ func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := views.RenderSearch(searchFile, s.cfg.Prefix, objects, s.cfg).Render(r.Context(), w); err != nil {
+	if err := views.RenderSearch(searchFile, s.cfg.S3.Prefix, objects, s.cfg).Render(r.Context(), w); err != nil {
 		s.log.Error("Failed to render search results", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error rendering search results", http.StatusInternalServerError)
 	}
