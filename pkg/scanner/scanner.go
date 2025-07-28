@@ -166,7 +166,7 @@ func (s *Service) GetScanStatus(ctx context.Context, bucketName string) (*databa
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
-	scanJob, err := s.queries.GetLatestScanJob(ctx, bucket.ID)
+	scanJob, err := s.queries.GetLatestScanJob(ctx, sql.NullInt32{Int32: bucket.ID, Valid: true})
 	if err != nil {
 		return nil, fmt.Errorf("no scan jobs found: %w", err)
 	}
@@ -508,7 +508,7 @@ func (s *Service) aggregateBucketStats(ctx context.Context, bucket string, stats
 		return
 	}
 
-	latestScanJob, err := s.queries.GetLatestScanJob(ctx, bucketRecord.ID)
+	latestScanJob, err := s.queries.GetLatestScanJob(ctx, sql.NullInt32{Int32: bucketRecord.ID, Valid: true})
 	if err != nil {
 		s.log.Debug("Could not get latest scan job for stats aggregation",
 			slog.String("bucket", bucket))
@@ -723,7 +723,7 @@ func (s *Service) initializeBucketAndScanJob(
 
 	// Create scan job
 	scanJob, err := s.queries.CreateScanJob(ctx, database.CreateScanJobParams{
-		BucketID: bucket.ID,
+		BucketID: sql.NullInt32{Int32: bucket.ID, Valid: true},
 		Status:   "running",
 	})
 	if err != nil {
