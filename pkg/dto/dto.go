@@ -31,7 +31,7 @@ type Bucket struct {
 	LastScanCompletedAt *time.Time `json:"lastScanCompletedAt,omitempty"`
 }
 
-// Breadcrumb represents a navigation breadcrumb
+// Breadcrumb represents a navigation breadcrumb.
 type Breadcrumb struct {
 	Name string `json:"name"`
 	Path string `json:"path"`

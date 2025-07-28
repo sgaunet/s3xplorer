@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,32 +30,17 @@ import (
 
 //go:generate go tool github.com/sqlc-dev/sqlc/cmd/sqlc generate -f sqlc.yaml
 
-// Package-level error variables.
-var (
-	// errNoAwsConfigMethod is returned when no method is available to initialize the AWS configuration.
-	errNoAwsConfigMethod = errors.New("no method to initialize aws.Config")
-)
+// ErrConfigFileNotProvided is returned when no configuration file is provided.
+var ErrConfigFileNotProvided = errors.New("configuration file not provided")
 
 func main() {
-	var err error
-	var fileName string
-	var cfg configapp.Config
-	flag.StringVar(&fileName, "f", "", "Configuration file")
-	flag.Parse()
-
-	// Check if the configuration file is provided
-	if fileName == "" {
-		fmt.Fprintf(os.Stderr, "Configuration file not provided. Exit 1")
-		fmt.Fprintf(os.Stderr, "\nUsage:\n")
-		flag.PrintDefaults()
+	// Parse configuration
+	cfg, err := parseConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	// Read the configuration file
-	if cfg, err = configapp.ReadYamlCnxFile(fileName); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading configuration file: %s\n", err.Error())
-		os.Exit(1)
-	}
 	// Initialize the logger
 	l := initTrace(cfg.LogLevel)
 
@@ -62,54 +48,102 @@ func main() {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	SetupCloseHandler(ctx, cancelFunc, l)
 
-	// initialize the S3 client
+	// Initialize infrastructure
+	s3Client, dbConn, err := initInfrastructure(ctx, cfg, l)
+	if err != nil {
+		l.Error("Failed to initialize infrastructure", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer func() {
+		if err := dbConn.Close(); err != nil {
+			l.Error("Failed to close database connection", slog.String("error", err.Error()))
+		}
+	}()
+
+	// Initialize and start services
+	dbService, scannerService, scheduler := initServices(cfg, s3Client, dbConn, l)
+	performInitialScan(ctx, cfg, scannerService, l)
+
+	if err := scheduler.Start(ctx); err != nil {
+		l.Error("error starting scheduler", slog.String("error", err.Error()))
+		return
+	}
+
+	// Create and run the app
+	s := app.NewApp(cfg, s3Client, dbService)
+	s.SetLogger(l)
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	shutdown(s, scheduler, l)
+}
+
+// parseConfig parses command line flags and reads the configuration file.
+func parseConfig() (configapp.Config, error) {
+	var fileName string
+	flag.StringVar(&fileName, "f", "", "Configuration file")
+	flag.Parse()
+
+	if fileName == "" {
+		flag.Usage()
+		return configapp.Config{}, ErrConfigFileNotProvided
+	}
+
+	cfg, err := configapp.ReadYamlCnxFile(fileName)
+	if err != nil {
+		return configapp.Config{}, fmt.Errorf("error reading configuration file: %w", err)
+	}
+	return cfg, nil
+}
+
+// initInfrastructure initializes S3 client and database connection.
+func initInfrastructure(ctx context.Context, cfg configapp.Config, l *slog.Logger) (*s3.Client, *sql.DB, error) {
 	s3Client, err := initS3Client(ctx, cfg)
 	if err != nil {
-		l.Error("error initializing the S3 client: %s", slog.String("error", err.Error()))
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("error initializing S3 client: %w", err)
 	}
 
-	// Initialize database with embedded migrations
-	dbConn, err := dbinit.InitializeDatabase(cfg.Database.URL, l)
+	dbConn, err := dbinit.InitializeDatabase(ctx, cfg.Database.URL, l)
 	if err != nil {
-		l.Error("error initializing database", slog.String("error", err.Error()))
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("error initializing database: %w", err)
 	}
-	defer dbConn.Close()
 
-	// Create services
+	return s3Client, dbConn, nil
+}
+
+// initServices creates and configures all services.
+func initServices(
+	cfg configapp.Config, s3Client *s3.Client, dbConn *sql.DB, l *slog.Logger,
+) (*dbsvc.Service, *scanner.Service, *scheduler.Scheduler) {
 	dbService := dbsvc.NewService(cfg, dbConn)
 	dbService.SetLogger(l)
 
 	scannerService := scanner.NewService(cfg, s3Client, dbConn)
 	scannerService.SetLogger(l)
 
-	// Create scheduler
 	scheduler := scheduler.NewScheduler(cfg, dbConn, scannerService)
 	scheduler.SetLogger(l)
 
-	// Perform initial scan if enabled
-	if cfg.Scan.EnableInitialScan {
-		l.Info("Performing initial bucket scan")
-		if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
-			l.Error("error during initial scan", slog.String("error", err.Error()))
-			// Don't exit - continue with application startup even if initial scan fails
-		} else {
-			l.Info("Initial bucket scan completed successfully")
-		}
+	return dbService, scannerService, scheduler
+}
+
+// performInitialScan runs the initial bucket scan if enabled.
+func performInitialScan(ctx context.Context, cfg configapp.Config, scannerService *scanner.Service, l *slog.Logger) {
+	if !cfg.Scan.EnableInitialScan {
+		return
 	}
 
-	// Start scheduler
-	if err := scheduler.Start(ctx); err != nil {
-		l.Error("error starting scheduler", slog.String("error", err.Error()))
-		os.Exit(1)
+	l.Info("Performing initial bucket scan")
+	if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
+		l.Error("error during initial scan", slog.String("error", err.Error()))
+		// Don't exit - continue with application startup even if initial scan fails
+	} else {
+		l.Info("Initial bucket scan completed successfully")
 	}
+}
 
-	// Create the app
-	s := app.NewApp(cfg, s3Client, dbService)
-	s.SetLogger(l)
-
-	<-ctx.Done()
+// shutdown handles graceful shutdown of services.
+func shutdown(s *app.App, scheduler *scheduler.Scheduler, l *slog.Logger) {
 	l.Info("stop the server")
 	scheduler.Stop()
 	if err := s.StopServer(); err != nil {
@@ -209,7 +243,7 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 			config.WithRegion(cfgApp.S3.Region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 				cfgApp.S3.AccessKey,
-				cfgApp.S3.ApiKey,
+				cfgApp.S3.APIKey,
 				"",
 			)),
 		)
@@ -243,12 +277,12 @@ func GetAwsConfig(ctx context.Context, cfgApp configapp.Config) (aws.Config, err
 		return cfg, nil
 	}
 
-	if cfgApp.S3.AccessKey != "" && cfgApp.S3.ApiKey != "" {
+	if cfgApp.S3.AccessKey != "" && cfgApp.S3.APIKey != "" {
 		cfg, err := config.LoadDefaultConfig(ctx,
 			config.WithRegion(cfgApp.S3.Region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 				cfgApp.S3.AccessKey,
-				cfgApp.S3.ApiKey,
+				cfgApp.S3.APIKey,
 				"",
 			)),
 		)

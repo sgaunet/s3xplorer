@@ -18,6 +18,8 @@ import (
 var (
 	// ErrMissingKeyParam is returned when the required key URL parameter is missing.
 	ErrMissingKeyParam = errors.New("URL parameter 'key' is missing")
+	// ErrBucketNotAccessible is returned when the requested bucket is not accessible.
+	ErrBucketNotAccessible = errors.New("bucket is not accessible")
 
 	// ErrInvalidKey is returned when a key does not match the required prefix.
 	ErrInvalidKey = errors.New("invalid key prefix")
@@ -28,7 +30,7 @@ var (
 
 // IndexBucket handles the index request.
 // handleBucketSwitch processes bucket switching requests and redirects appropriately.
-func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *http.Request) (bool, error) {
+func (s *App) handleBucketSwitch(ctx context.Context, w http.ResponseWriter, r *http.Request) (bool, error) {
 	switchBucket, hasSwitchParam := r.URL.Query()["switchBucket"]
 	if !hasSwitchParam || len(switchBucket[0]) < 1 {
 		return false, nil // No bucket switch requested
@@ -50,7 +52,7 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 	s.log.Info("Switching bucket", slog.String("to", newBucket))
 
 	// Check if the requested bucket is accessible by getting it from the accessible buckets list
-	accessibleBuckets, err := s.dbsvc.GetBuckets(r.Context())
+	accessibleBuckets, err := s.dbsvc.GetBuckets(ctx)
 	if err != nil {
 		s.log.Error("Failed to get accessible buckets", slog.String("error", err.Error()))
 		return true, fmt.Errorf("failed to verify bucket accessibility: %w", err)
@@ -68,7 +70,7 @@ func (s *App) handleBucketSwitch(_ context.Context, w http.ResponseWriter, r *ht
 	if !bucketAccessible {
 		s.log.Warn("Attempted to access inaccessible bucket",
 			slog.String("bucket", newBucket))
-		return true, fmt.Errorf("bucket %s is not accessible", newBucket)
+		return true, fmt.Errorf("%w: %s", ErrBucketNotAccessible, newBucket)
 	}
 
 	// Update the bucket in the s3svc service
@@ -135,7 +137,8 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 // loadAndRenderBucketContents fetches and renders the bucket contents using hierarchical navigation.
 func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
 	// Get direct children (immediate subfolders and files) using hierarchical navigation
-	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.S3.Bucket, folderPath, 1000, 0)
+	const maxDirectChildren = 1000
+	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.S3.Bucket, folderPath, maxDirectChildren, 0)
 	if err != nil {
 		s.log.Error("Error getting direct children", slog.String("error", err.Error()))
 		return fmt.Errorf("failed to get direct children: %w", err)

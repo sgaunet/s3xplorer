@@ -13,11 +13,11 @@ import (
 // ErrIsDirectory is returned when a file operation is performed on a directory.
 var ErrIsDirectory = errors.New("expected file but got directory")
 
-// S3Config contains S3-related configuration
+// S3Config contains S3-related configuration.
 type S3Config struct {
 	Endpoint         string `yaml:"endpoint"`
 	AccessKey        string `yaml:"access_key"`
-	ApiKey           string `yaml:"api_key"`
+	APIKey           string `yaml:"api_key"`
 	Region           string `yaml:"region"`
 	SsoAwsProfile    string `yaml:"sso_aws_profile"`
 	Bucket           string `yaml:"bucket"`
@@ -29,12 +29,12 @@ type S3Config struct {
 	BucketLocked     bool   `yaml:"-"`
 }
 
-// DatabaseConfig contains database-related configuration
+// DatabaseConfig contains database-related configuration.
 type DatabaseConfig struct {
 	URL string `yaml:"url"`
 }
 
-// ScanConfig contains scanning-related configuration
+// ScanConfig contains scanning-related configuration.
 type ScanConfig struct {
 	EnableBackgroundScan bool   `yaml:"enable_background_scan"`
 	CronSchedule         string `yaml:"cron_schedule"`
@@ -42,7 +42,7 @@ type ScanConfig struct {
 	EnableDeletionSync   bool   `yaml:"enable_deletion_sync"`
 }
 
-// BucketSyncConfig contains bucket synchronization configuration
+// BucketSyncConfig contains bucket synchronization configuration.
 type BucketSyncConfig struct {
 	Enable          bool   `yaml:"enable"`
 	SyncThreshold   string `yaml:"sync_threshold"`
@@ -122,80 +122,16 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 	return config, nil
 }
 
-// migrateFromLegacy migrates legacy flat configuration fields to the new hierarchical structure
+// migrateFromLegacy migrates legacy flat configuration fields to the new hierarchical structure.
 func (c *Config) migrateFromLegacy() {
-	// Migrate S3 configuration
-	if c.S3endpoint != "" && c.S3.Endpoint == "" {
-		c.S3.Endpoint = c.S3endpoint
-	}
-	if c.S3accessKey != "" && c.S3.AccessKey == "" {
-		c.S3.AccessKey = c.S3accessKey
-	}
-	if c.S3ApikKey != "" && c.S3.ApiKey == "" {
-		c.S3.ApiKey = c.S3ApikKey
-	}
-	if c.S3Region != "" && c.S3.Region == "" {
-		c.S3.Region = c.S3Region
-	}
-	if c.SsoAwsProfile != "" && c.S3.SsoAwsProfile == "" {
-		c.S3.SsoAwsProfile = c.SsoAwsProfile
-	}
-	if c.Bucket != "" && c.S3.Bucket == "" {
-		c.S3.Bucket = c.Bucket
-	}
-	if c.Prefix != "" && c.S3.Prefix == "" {
-		c.S3.Prefix = c.Prefix
-	}
-	if c.RestoreDays > 0 && c.S3.RestoreDays == 0 {
-		c.S3.RestoreDays = c.RestoreDays
-	}
-	if c.EnableGlacierRestore && !c.S3.EnableGlacierRestore {
-		c.S3.EnableGlacierRestore = c.EnableGlacierRestore
-	}
-	if c.SkipBucketValidation && !c.S3.SkipBucketValidation {
-		c.S3.SkipBucketValidation = c.SkipBucketValidation
-	}
-	
-	// Migrate Database configuration
-	if c.DatabaseURL != "" && c.Database.URL == "" {
-		c.Database.URL = c.DatabaseURL
-	}
-	
-	// Migrate Scan configuration
-	if c.EnableBackgroundScan && !c.Scan.EnableBackgroundScan {
-		c.Scan.EnableBackgroundScan = c.EnableBackgroundScan
-	}
-	if c.ScanCronSchedule != "" && c.Scan.CronSchedule == "" {
-		c.Scan.CronSchedule = c.ScanCronSchedule
-	}
-	if c.EnableInitialScan && !c.Scan.EnableInitialScan {
-		c.Scan.EnableInitialScan = c.EnableInitialScan
-	}
-	if c.EnableDeletionSync && !c.Scan.EnableDeletionSync {
-		c.Scan.EnableDeletionSync = c.EnableDeletionSync
-	}
-	
-	// Migrate BucketSync configuration
-	if c.EnableBucketSync && !c.BucketSync.Enable {
-		c.BucketSync.Enable = c.EnableBucketSync
-	}
-	if c.BucketSyncThreshold != "" && c.BucketSync.SyncThreshold == "" {
-		c.BucketSync.SyncThreshold = c.BucketSyncThreshold
-	}
-	if c.BucketDeleteThreshold != "" && c.BucketSync.DeleteThreshold == "" {
-		c.BucketSync.DeleteThreshold = c.BucketDeleteThreshold
-	}
-	if c.BucketMaxRetries > 0 && c.BucketSync.MaxRetries == 0 {
-		c.BucketSync.MaxRetries = c.BucketMaxRetries
-	}
-	
-	// Migrate LogLevel
-	if c.LegacyLogLevel != "" && c.LogLevel == "" {
-		c.LogLevel = c.LegacyLogLevel
-	}
+	c.migrateS3Config()
+	c.migrateDatabaseConfig()
+	c.migrateScanConfig()
+	c.migrateBucketSyncConfig()
+	c.migrateLogLevel()
 }
 
-// setDefaults sets default values for configuration fields
+// setDefaults sets default values for configuration fields.
 func (c *Config) setDefaults() {
 	// Set default scan cron schedule
 	if c.Scan.CronSchedule == "" {
@@ -216,5 +152,86 @@ func (c *Config) setDefaults() {
 	}
 	if c.BucketSync.MaxRetries == 0 {
 		c.BucketSync.MaxRetries = 3 // Default to 3 retries for bucket access checks
+	}
+}
+
+// migrateS3Config migrates S3-related legacy configuration fields.
+func (c *Config) migrateS3Config() {
+	c.migrateStringField(c.S3endpoint, &c.S3.Endpoint)
+	c.migrateStringField(c.S3accessKey, &c.S3.AccessKey)
+	c.migrateStringField(c.S3ApikKey, &c.S3.APIKey)
+	c.migrateStringField(c.S3Region, &c.S3.Region)
+	c.migrateStringField(c.SsoAwsProfile, &c.S3.SsoAwsProfile)
+	c.migrateStringField(c.Bucket, &c.S3.Bucket)
+	c.migrateStringField(c.Prefix, &c.S3.Prefix)
+	c.migrateIntField(c.RestoreDays, &c.S3.RestoreDays)
+	c.migrateBoolField(c.EnableGlacierRestore, &c.S3.EnableGlacierRestore)
+	c.migrateBoolField(c.SkipBucketValidation, &c.S3.SkipBucketValidation)
+}
+
+// migrateDatabaseConfig migrates database-related legacy configuration fields.
+func (c *Config) migrateDatabaseConfig() {
+	if c.DatabaseURL != "" && c.Database.URL == "" {
+		c.Database.URL = c.DatabaseURL
+	}
+}
+
+// migrateScanConfig migrates scan-related legacy configuration fields.
+func (c *Config) migrateScanConfig() {
+	if c.EnableBackgroundScan && !c.Scan.EnableBackgroundScan {
+		c.Scan.EnableBackgroundScan = c.EnableBackgroundScan
+	}
+	if c.ScanCronSchedule != "" && c.Scan.CronSchedule == "" {
+		c.Scan.CronSchedule = c.ScanCronSchedule
+	}
+	if c.EnableInitialScan && !c.Scan.EnableInitialScan {
+		c.Scan.EnableInitialScan = c.EnableInitialScan
+	}
+	if c.EnableDeletionSync && !c.Scan.EnableDeletionSync {
+		c.Scan.EnableDeletionSync = c.EnableDeletionSync
+	}
+}
+
+// migrateBucketSyncConfig migrates bucket sync-related legacy configuration fields.
+func (c *Config) migrateBucketSyncConfig() {
+	if c.EnableBucketSync && !c.BucketSync.Enable {
+		c.BucketSync.Enable = c.EnableBucketSync
+	}
+	if c.BucketSyncThreshold != "" && c.BucketSync.SyncThreshold == "" {
+		c.BucketSync.SyncThreshold = c.BucketSyncThreshold
+	}
+	if c.BucketDeleteThreshold != "" && c.BucketSync.DeleteThreshold == "" {
+		c.BucketSync.DeleteThreshold = c.BucketDeleteThreshold
+	}
+	if c.BucketMaxRetries > 0 && c.BucketSync.MaxRetries == 0 {
+		c.BucketSync.MaxRetries = c.BucketMaxRetries
+	}
+}
+
+// migrateLogLevel migrates log level legacy configuration field.
+func (c *Config) migrateLogLevel() {
+	if c.LegacyLogLevel != "" && c.LogLevel == "" {
+		c.LogLevel = c.LegacyLogLevel
+	}
+}
+
+// migrateStringField migrates a string field from legacy to new if new is empty.
+func (c *Config) migrateStringField(legacy string, target *string) {
+	if legacy != "" && *target == "" {
+		*target = legacy
+	}
+}
+
+// migrateIntField migrates an int field from legacy to new if new is zero.
+func (c *Config) migrateIntField(legacy int, target *int) {
+	if legacy > 0 && *target == 0 {
+		*target = legacy
+	}
+}
+
+// migrateBoolField migrates a bool field from legacy to new if new is false.
+func (c *Config) migrateBoolField(legacy bool, target *bool) {
+	if legacy && !*target {
+		*target = legacy
 	}
 }
