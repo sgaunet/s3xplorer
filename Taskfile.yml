@@ -13,7 +13,8 @@ tasks:
     desc: "Build the binary"
     cmds:
       - go mod download
-      - task: sqlc
+      - go generate ./...
+      # - task: sqlc
       - CGO_ENABLED=0 go build .
 
   linter:
@@ -22,10 +23,10 @@ tasks:
       - go generate ./...
       - golangci-lint run
 
-  sqlc:
-    desc: "Generate database code with sqlc"
-    cmds:
-      - sqlc generate
+  # sqlc:
+  #   desc: "Generate database code with sqlc"
+  #   cmds:
+  #     - sqlc generate
 
   minio:
     desc: "Launch minio server"
