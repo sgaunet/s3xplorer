@@ -1,9 +1,8 @@
 data
 postgres_data
-s3xplorer
-.task
-dist
+/s3xplorer
+/.task
+/dist
 *vault*
 *_templ.go
-.devbox
 /pkg/database
