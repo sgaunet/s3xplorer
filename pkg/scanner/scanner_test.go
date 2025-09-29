@@ -33,7 +33,9 @@ func TestDeletionSyncConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create config with deletion sync setting
 			cfg := config.Config{
-				EnableDeletionSync: tt.enableDeletionSync,
+				Scan: config.ScanConfig{
+					EnableDeletionSync: tt.enableDeletionSync,
+				},
 			}
 
 			// Create scanner service (with nil dependencies for config-only test)
@@ -53,7 +55,7 @@ func TestConfigurationDefaults(t *testing.T) {
 	cfg := config.Config{}
 	
 	// Deletion sync should default to false (zero value)
-	assert.False(t, cfg.EnableDeletionSync)
+	assert.False(t, cfg.Scan.EnableDeletionSync)
 }
 
 // MockQueries represents a mock implementation of database queries for testing

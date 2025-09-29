@@ -43,6 +43,11 @@ func (s *Service) SetLogger(log *slog.Logger) {
 	s.log = log
 }
 
+// GetDB returns the underlying database connection.
+func (s *Service) GetDB() *sql.DB {
+	return s.db
+}
+
 // GetBuckets returns only accessible buckets for normal user operations.
 func (s *Service) GetBuckets(ctx context.Context) ([]dto.Bucket, error) {
 	buckets, err := s.queries.ListAccessibleBuckets(ctx)

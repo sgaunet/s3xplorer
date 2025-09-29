@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sgaunet/s3xplorer/pkg/config"
 	"github.com/sgaunet/s3xplorer/pkg/dbsvc"
+	"github.com/sgaunet/s3xplorer/pkg/health"
 	"github.com/sgaunet/s3xplorer/pkg/s3svc"
 )
 
@@ -21,6 +22,7 @@ type App struct {
 	awsS3Client *s3.Client
 	s3svc       *s3svc.Service
 	dbsvc       *dbsvc.Service
+	dbHealth    *health.DatabaseHealth
 	router      *mux.Router
 	srv         *http.Server
 	log         *slog.Logger
@@ -42,6 +44,13 @@ func NewApp(cfg config.Config, s3Client *s3.Client, dbService *dbsvc.Service) *A
 		DefaultReadHeaderTimeoutSeconds = 5
 	)
 
+	var dbHealth *health.DatabaseHealth
+	if dbService != nil {
+		// Initialize health monitoring for database
+		dbHealth = health.NewDatabaseHealth(dbService.GetDB(), emptyLogger())
+		dbHealth.Start(context.Background())
+	}
+
 	s := &App{
 		cfg:         cfg,
 		awsS3Client: s3Client,
@@ -50,8 +59,9 @@ func NewApp(cfg config.Config, s3Client *s3.Client, dbService *dbsvc.Service) *A
 		srv: &http.Server{
 			ReadHeaderTimeout: DefaultReadHeaderTimeoutSeconds * time.Second, // Mitigate Slowloris attacks
 		},
-		s3svc: s3svc.NewS3Svc(cfg, s3Client),
-		dbsvc: dbService,
+		s3svc:    s3svc.NewS3Svc(cfg, s3Client),
+		dbsvc:    dbService,
+		dbHealth: dbHealth,
 	}
 
 	s.initRouter()
@@ -71,11 +81,30 @@ func NewApp(cfg config.Config, s3Client *s3.Client, dbService *dbsvc.Service) *A
 func (s *App) SetLogger(l *slog.Logger) {
 	s.log = l
 	s.s3svc.SetLogger(l)
-	s.dbsvc.SetLogger(l)
+	if s.dbsvc != nil {
+		s.dbsvc.SetLogger(l)
+	}
+	// Note: dbHealth logger is set during initialization and doesn't need updating
+}
+
+// GetDatabaseHealth returns the database health monitor.
+func (s *App) GetDatabaseHealth() *health.DatabaseHealth {
+	return s.dbHealth
+}
+
+// IsDatabaseHealthy returns true if the database is healthy.
+func (s *App) IsDatabaseHealthy() bool {
+	if s.dbHealth == nil {
+		return false
+	}
+	return s.dbHealth.IsHealthy()
 }
 
 // StopServer stops the web server.
 func (s *App) StopServer() error {
+	if s.dbHealth != nil {
+		s.dbHealth.Stop()
+	}
 	if err := s.srv.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("error stopping server: %w", err)
 	}

@@ -1,0 +1,100 @@
+package views
+
+import (
+    "time"
+)
+
+templ RenderDatabaseUnavailable() {
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database Unavailable - s3xplorer</title>
+    <link rel="stylesheet" href="/static/output.css" />
+    <meta http-equiv="refresh" content="30" />
+  </head>
+  <body class="bg-dark">
+    <h1 class="text-4xl text-gray-50 text-center pt-20">
+      s3xplorer
+    </h1>
+    <div class="container mx-auto px-4 py-8 text-center">
+      <div class="max-w-md mx-auto bg-red-600 bg-opacity-20 border border-red-500 rounded-lg p-6">
+        <div class="mb-4">
+          <svg class="mx-auto h-16 w-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-red-400 mb-4">Database Unavailable</h2>
+        <p class="text-gray-300 mb-4">
+          The database is currently unavailable. S3xplorer is running in degraded mode.
+        </p>
+        <p class="text-gray-400 text-sm mb-6">
+          • S3 direct operations are still available<br/>
+          • Bucket scanning and metadata features are disabled<br/>
+          • The application will automatically reconnect when the database is available
+        </p>
+        <div class="space-y-3">
+          <a href="/health/database"
+             class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+            Check Database Status
+          </a>
+          <br/>
+          <a href="/"
+             class="inline-block bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+            Return to Home
+          </a>
+        </div>
+        <p class="text-gray-500 text-xs mt-4">
+          This page will auto-refresh every 30 seconds
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
+}
+
+templ RenderDatabaseHealthy(lastCheck time.Time) {
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database Health - s3xplorer</title>
+    <link rel="stylesheet" href="/static/output.css" />
+  </head>
+  <body class="bg-dark">
+    <h1 class="text-4xl text-gray-50 text-center pt-20">
+      s3xplorer
+    </h1>
+    <div class="container mx-auto px-4 py-8 text-center">
+      <div class="max-w-md mx-auto bg-green-600 bg-opacity-20 border border-green-500 rounded-lg p-6">
+        <div class="mb-4">
+          <svg class="mx-auto h-16 w-16 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-green-400 mb-4">Database Healthy</h2>
+        <p class="text-gray-300 mb-4">
+          The database connection is working correctly.
+        </p>
+        <div class="text-gray-400 text-sm mb-6">
+          <p><strong>Last Check:</strong> { lastCheck.Format("2006-01-02 15:04:05 UTC") }</p>
+          <p class="mt-2">All s3xplorer features are fully operational</p>
+        </div>
+        <div class="space-y-3">
+          <a href="/health"
+             class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+            View Full Health Status
+          </a>
+          <br/>
+          <a href="/"
+             class="inline-block bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+            Return to Home
+          </a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+}

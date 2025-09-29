@@ -12,21 +12,29 @@ import (
 )
 
 func TestReadYamlCnxFile_ValidFile(t *testing.T) {
-	// Create a temporary test file with valid YAML
+	// Create a temporary test file with valid hierarchical YAML
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "valid_config.yaml")
 
 	validYaml := `
-s3endpoint: https://s3.example.com
-accesskey: test-access-key
-apikey: test-api-key
-s3region: us-west-2
-ssoawsprofile: test-profile
-bucket: test-bucket
-prefix: test-prefix
+s3:
+  endpoint: https://s3.example.com
+  access_key: test-access-key
+  api_key: test-api-key
+  region: us-west-2
+  sso_aws_profile: test-profile
+  bucket: test-bucket
+  prefix: test-prefix
+  restore_days: 5
+  enable_glacier_restore: true
+database:
+  url: postgres://custom@localhost:5432/mydb
+scan:
+  enable_background_scan: true
+  cron_schedule: "0 */6 * * *"
+bucket_sync:
+  enable: true
 log_level: debug
-restoredays: 5
-enableglacierrestore: true
 `
 	err := os.WriteFile(tmpFile, []byte(validYaml), 0644)
 	require.NoError(t, err, "Failed to create test file")
@@ -35,7 +43,7 @@ enableglacierrestore: true
 	cfg, err := config.ReadYamlCnxFile(tmpFile)
 	require.NoError(t, err, "ReadYamlCnxFile should not return an error for valid YAML")
 
-	// Verify all fields are correctly unmarshaled (test legacy migration)
+	// Verify all fields are correctly unmarshaled
 	assert.Equal(t, "https://s3.example.com", cfg.S3.Endpoint)
 	assert.Equal(t, "test-access-key", cfg.S3.AccessKey)
 	assert.Equal(t, "test-api-key", cfg.S3.APIKey)
@@ -46,6 +54,10 @@ enableglacierrestore: true
 	assert.Equal(t, "debug", cfg.LogLevel)
 	assert.Equal(t, 5, cfg.S3.RestoreDays)
 	assert.Equal(t, true, cfg.S3.EnableGlacierRestore)
+	assert.Equal(t, "postgres://custom@localhost:5432/mydb", cfg.Database.URL)
+	assert.Equal(t, true, cfg.Scan.EnableBackgroundScan)
+	assert.Equal(t, "0 */6 * * *", cfg.Scan.CronSchedule)
+	assert.Equal(t, true, cfg.BucketSync.Enable)
 }
 
 func TestReadYamlCnxFile_InvalidYaml(t *testing.T) {
@@ -54,16 +66,16 @@ func TestReadYamlCnxFile_InvalidYaml(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "invalid_config.yaml")
 
 	invalidYaml := `
-s3endpoint: https://s3.example.com
-accesskey: test-access-key
-apikey: test-api-key
-s3region: us-west-2
-ssoawsprofile: test-profile
-bucket: test-bucket
-prefix: test-prefix
-loglevel: debug
-restoredays: not-a-number  # Invalid value for int field
-enableglacierrestore: true
+s3:
+  endpoint: https://s3.example.com
+  access_key: test-access-key
+  api_key: test-api-key
+  region: us-west-2
+  bucket: test-bucket
+  prefix: test-prefix
+  restore_days: not-a-number  # Invalid value for int field
+  enable_glacier_restore: true
+log_level: debug
 `
 	err := os.WriteFile(tmpFile, []byte(invalidYaml), 0644)
 	require.NoError(t, err, "Failed to create test file")
@@ -116,9 +128,10 @@ func TestReadYamlCnxFile_PartialConfig(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "partial_config.yaml")
 
 	partialYaml := `
-s3endpoint: https://s3.example.com
-bucket: test-bucket
-restoredays: 7
+s3:
+  endpoint: https://s3.example.com
+  bucket: test-bucket
+  restore_days: 7
 `
 	err := os.WriteFile(tmpFile, []byte(partialYaml), 0644)
 	require.NoError(t, err, "Failed to create test file")
@@ -127,7 +140,7 @@ restoredays: 7
 	cfg, err := config.ReadYamlCnxFile(tmpFile)
 	require.NoError(t, err, "ReadYamlCnxFile should not return an error for partial config")
 
-	// Verify specified fields are set and others have zero values (test legacy migration)
+	// Verify specified fields are set and others have zero values
 	assert.Equal(t, "https://s3.example.com", cfg.S3.Endpoint)
 	assert.Equal(t, "", cfg.S3.AccessKey)
 	assert.Equal(t, "", cfg.S3.APIKey)

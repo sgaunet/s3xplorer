@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -170,6 +171,12 @@ func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWr
 func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Check if database is available
+	if s.dbsvc == nil || !s.IsDatabaseHealthy() {
+		s.renderDatabaseUnavailablePage(ctx, w)
+		return
+	}
+
 	// Check if we're trying to switch buckets
 	handled, err := s.handleBucketSwitch(ctx, w, r)
 	if err != nil {
@@ -313,4 +320,87 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/?folder="+f, http.StatusTemporaryRedirect)
+}
+
+// HealthCheckHandler provides overall application health status.
+func (s *App) HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
+	health := make(map[string]interface{})
+
+	// Check database health
+	if s.dbHealth != nil {
+		dbHealth := s.dbHealth.GetHealthInfo()
+		health["database"] = dbHealth
+		health["overall"] = dbHealth.Status
+	} else {
+		health["database"] = map[string]interface{}{
+			"status":      "unhealthy",
+			"last_error":  "Database not configured",
+			"is_connected": false,
+		}
+		health["overall"] = "unhealthy"
+	}
+
+	// Set appropriate HTTP status
+	statusCode := http.StatusOK
+	if health["overall"] != "healthy" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		s.log.Error("Failed to encode health response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// DatabaseHealthHandler provides detailed database health information.
+func (s *App) DatabaseHealthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if s.dbHealth == nil {
+		// Render database unavailable page
+		s.renderDatabaseUnavailablePage(ctx, w)
+		return
+	}
+
+	healthInfo := s.dbHealth.GetHealthInfo()
+
+	// For HTML requests, render a user-friendly page
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+		if healthInfo.IsConnected {
+			if err := views.RenderDatabaseHealthy(healthInfo.LastCheck).Render(ctx, w); err != nil {
+				s.log.Error("Failed to render database health page", slog.String("error", err.Error()))
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		} else {
+			s.renderDatabaseUnavailablePage(ctx, w)
+		}
+		return
+	}
+
+	// For JSON requests, return structured data
+	w.Header().Set("Content-Type", "application/json")
+	statusCode := http.StatusOK
+	if !healthInfo.IsConnected {
+		statusCode = http.StatusServiceUnavailable
+	}
+	w.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(w).Encode(healthInfo); err != nil {
+		s.log.Error("Failed to encode database health response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// renderDatabaseUnavailablePage renders an error page when database is unavailable.
+func (s *App) renderDatabaseUnavailablePage(ctx context.Context, w http.ResponseWriter) {
+	w.WriteHeader(http.StatusServiceUnavailable)
+	if err := views.RenderDatabaseUnavailable().Render(ctx, w); err != nil {
+		s.log.Error("Failed to render database unavailable page", slog.String("error", err.Error()))
+		http.Error(w, "Database is currently unavailable. Please try again later.", http.StatusServiceUnavailable)
+	}
 }

@@ -11,5 +11,7 @@ func (s *App) initRouter() {
 	s.router.HandleFunc("/restore", s.RestoreHandler)
 	s.router.HandleFunc("/search", s.SearchHandler)
 	s.router.HandleFunc("/buckets", s.BucketListingHandler)
+	s.router.HandleFunc("/health", s.HealthCheckHandler)
+	s.router.HandleFunc("/health/database", s.DatabaseHealthHandler)
 	s.srv.Handler = s.router
 }

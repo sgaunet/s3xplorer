@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"github.com/amacneil/dbmate/v2/pkg/dbmate"
 	_ "github.com/amacneil/dbmate/v2/pkg/driver/postgres" // PostgreSQL driver for dbmate
@@ -21,13 +22,66 @@ var migrations embed.FS
 
 // InitializeDatabase initializes the database using embedded migrations.
 func InitializeDatabase(ctx context.Context, databaseURL string, logger *slog.Logger) (*sql.DB, error) {
+	const (
+		defaultMaxRetries = 3
+		defaultBaseDelay  = 2 * time.Second
+	)
+	return InitializeDatabaseWithRetry(ctx, databaseURL, logger, defaultMaxRetries, defaultBaseDelay)
+}
+
+// InitializeDatabaseWithRetry initializes the database with retry logic and exponential backoff.
+func InitializeDatabaseWithRetry(
+	ctx context.Context, databaseURL string, logger *slog.Logger, maxRetries int, baseDelay time.Duration,
+) (*sql.DB, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff with safe conversion
+			backoffMultiplier := 1
+			for i := 1; i < attempt; i++ {
+				backoffMultiplier *= 2
+			}
+			delay := time.Duration(backoffMultiplier) * baseDelay
+			logger.Info("Retrying database initialization",
+				slog.Int("attempt", attempt+1),
+				slog.Int("max_attempts", maxRetries+1),
+				slog.Duration("delay", delay))
+
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("database initialization cancelled: %w", ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+
+		db, err := initializeDatabaseAttempt(ctx, databaseURL, logger)
+		if err == nil {
+			if attempt > 0 {
+				logger.Info("Database initialization succeeded after retries", slog.Int("attempts", attempt+1))
+			}
+			return db, nil
+		}
+
+		lastErr = err
+		logger.Warn("Database initialization failed",
+			slog.Int("attempt", attempt+1),
+			slog.Int("max_attempts", maxRetries+1),
+			slog.String("error", err.Error()))
+	}
+
+	return nil, fmt.Errorf("database initialization failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// initializeDatabaseAttempt performs a single database initialization attempt.
+func initializeDatabaseAttempt(ctx context.Context, databaseURL string, logger *slog.Logger) (*sql.DB, error) {
 	// Parse and validate database URL
 	parsedURL, err := url.Parse(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid database URL: %w", err)
 	}
 
-	logger.Info("Initializing database", slog.String("host", parsedURL.Host))
+	logger.Debug("Attempting database initialization", slog.String("host", parsedURL.Host))
 
 	// Set up and run migrations
 	err = setupAndRunMigrations(parsedURL, logger)
@@ -35,7 +89,7 @@ func InitializeDatabase(ctx context.Context, databaseURL string, logger *slog.Lo
 		return nil, err
 	}
 
-	logger.Info("Database initialization completed successfully")
+	logger.Debug("Database migrations completed successfully")
 
 	// Open and test database connection
 	return openAndTestConnection(ctx, databaseURL, logger)

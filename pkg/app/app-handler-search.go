@@ -10,6 +10,12 @@ import (
 
 // SearchHandler handles the search request.
 func (s *App) SearchHandler(w http.ResponseWriter, r *http.Request) {
+	// Check if database is available
+	if s.dbsvc == nil || !s.IsDatabaseHealthy() {
+		s.renderDatabaseUnavailablePage(r.Context(), w)
+		return
+	}
+
 	var err error
 	var searchFile string
 
