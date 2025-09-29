@@ -14,8 +14,10 @@ import (
 func TestNewS3Svc(t *testing.T) {
 	// Setup with nil client for basic initialization test
 	cfg := config.Config{
-		Bucket:      "test-bucket",
-		RestoreDays: 5,
+		S3: config.S3Config{
+			Bucket:      "test-bucket",
+			RestoreDays: 5,
+		},
 	}
 
 	// Create service
@@ -31,7 +33,9 @@ func TestNewS3Svc(t *testing.T) {
 func TestSetLogger(t *testing.T) {
 	// Setup
 	cfg := config.Config{
-		Bucket: "test-bucket",
+		S3: config.S3Config{
+			Bucket: "test-bucket",
+		},
 	}
 
 	// Create service
@@ -67,8 +71,10 @@ func TestRestoreDaysConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a service with the test configuration
 			cfg := config.Config{
-				Bucket:      "test-bucket",
-				RestoreDays: tc.restoreDays,
+				S3: config.S3Config{
+					Bucket:      "test-bucket",
+					RestoreDays: tc.restoreDays,
+				},
 			}
 			
 			// We can't test this directly without mocking,

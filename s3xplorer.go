@@ -50,28 +50,46 @@ func main() {
 
 	// Initialize infrastructure
 	s3Client, dbConn, err := initInfrastructure(ctx, cfg, l)
+	var dbService *dbsvc.Service
+	var scannerService *scanner.Service
+	var scheduler *scheduler.Scheduler
+
 	if err != nil {
 		l.Error("Failed to initialize infrastructure", slog.String("error", err.Error()))
-		os.Exit(1)
+		l.Warn("Starting application in degraded mode without database connectivity")
+
+		// Initialize services without database connection
+		dbService = nil // Will be handled gracefully by the app
+		// scannerService and scheduler remain nil when database is unavailable
+	} else {
+		defer func() {
+			if err := dbConn.Close(); err != nil {
+				l.Error("Failed to close database connection", slog.String("error", err.Error()))
+			}
+		}()
+
+		// Initialize services
+		dbService, scannerService, scheduler = initServices(cfg, s3Client, dbConn, l)
 	}
-	defer func() {
-		if err := dbConn.Close(); err != nil {
-			l.Error("Failed to close database connection", slog.String("error", err.Error()))
-		}
-	}()
 
-	// Initialize and start services
-	dbService, scannerService, scheduler := initServices(cfg, s3Client, dbConn, l)
-	performInitialScan(ctx, cfg, scannerService, l)
-
-	if err := scheduler.Start(ctx); err != nil {
-		l.Error("error starting scheduler", slog.String("error", err.Error()))
-		return
-	}
-
-	// Create and run the app
+	// Create and start the web server immediately (handles nil dbService gracefully)
 	s := app.NewApp(cfg, s3Client, dbService)
 	s.SetLogger(l)
+
+	// Start background processes after web server is running
+	if scannerService != nil && scheduler != nil {
+		// Run initial scan in background to avoid blocking web server startup
+		go func() {
+			l.Info("Starting initial scan in background - web server is ready for health checks")
+			performInitialScan(ctx, cfg, scannerService, l)
+
+			// Start scheduler after initial scan completes
+			if err := scheduler.Start(ctx); err != nil {
+				l.Error("error starting scheduler", slog.String("error", err.Error()))
+				// Continue without scheduler instead of crashing
+			}
+		}()
+	}
 
 	// Wait for shutdown signal
 	<-ctx.Done()
@@ -133,6 +151,11 @@ func performInitialScan(ctx context.Context, cfg configapp.Config, scannerServic
 		return
 	}
 
+	if scannerService == nil {
+		l.Warn("Skipping initial scan - scanner service not available (database unavailable)")
+		return
+	}
+
 	l.Info("Performing initial bucket scan")
 	if err := scannerService.DiscoverAndScanAllBuckets(ctx); err != nil {
 		l.Error("error during initial scan", slog.String("error", err.Error()))
@@ -145,7 +168,9 @@ func performInitialScan(ctx context.Context, cfg configapp.Config, scannerServic
 // shutdown handles graceful shutdown of services.
 func shutdown(s *app.App, scheduler *scheduler.Scheduler, l *slog.Logger) {
 	l.Info("stop the server")
-	scheduler.Stop()
+	if scheduler != nil {
+		scheduler.Stop()
+	}
 	if err := s.StopServer(); err != nil {
 		l.Error("error stopping server", slog.String("error", err.Error()))
 	}

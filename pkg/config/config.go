@@ -57,29 +57,6 @@ type Config struct {
 	Scan       ScanConfig       `yaml:"scan"`
 	BucketSync BucketSyncConfig `yaml:"bucket_sync"`
 	LogLevel   string           `yaml:"log_level"`
-	
-	// Legacy flat fields for backward compatibility
-	// These will be deprecated in future versions
-	S3endpoint         string `yaml:"s3endpoint,omitempty"`
-	S3accessKey        string `yaml:"accesskey,omitempty"`
-	S3ApikKey          string `yaml:"apikey,omitempty"`
-	S3Region           string `yaml:"s3region,omitempty"`
-	SsoAwsProfile      string `yaml:"ssoawsprofile,omitempty"`
-	Bucket             string `yaml:"bucket,omitempty"`
-	Prefix             string `yaml:"prefix,omitempty"`
-	RestoreDays        int    `yaml:"restoredays,omitempty"`
-	EnableGlacierRestore bool  `yaml:"enableglacierrestore,omitempty"`
-	DatabaseURL        string `yaml:"database_url,omitempty"`
-	ScanCronSchedule   string `yaml:"scan_cron_schedule,omitempty"`
-	EnableBackgroundScan bool `yaml:"enable_background_scan,omitempty"`
-	EnableInitialScan  bool   `yaml:"enable_initial_scan,omitempty"`
-	EnableDeletionSync bool   `yaml:"enable_deletion_sync,omitempty"`
-	EnableBucketSync      bool   `yaml:"enable_bucket_sync,omitempty"`
-	BucketSyncThreshold   string `yaml:"bucket_sync_threshold,omitempty"`
-	BucketDeleteThreshold string `yaml:"bucket_delete_threshold,omitempty"`
-	BucketMaxRetries      int    `yaml:"bucket_max_retries,omitempty"`
-	SkipBucketValidation  bool   `yaml:"skip_bucket_validation,omitempty"`
-	LegacyLogLevel        string `yaml:"loglevel,omitempty"`
 }
 
 // ReadYamlCnxFile reads a yaml file and returns a Config struct.
@@ -110,9 +87,6 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 		return config, fmt.Errorf("error parsing YAML from %s: %w", filename, err)
 	}
 	
-	// Migrate legacy flat fields to new hierarchical structure
-	config.migrateFromLegacy()
-	
 	// Set BucketLocked flag if bucket is explicitly specified in config
 	config.S3.BucketLocked = config.S3.Bucket != ""
 	
@@ -120,15 +94,6 @@ func ReadYamlCnxFile(filename string) (Config, error) {
 	config.setDefaults()
 
 	return config, nil
-}
-
-// migrateFromLegacy migrates legacy flat configuration fields to the new hierarchical structure.
-func (c *Config) migrateFromLegacy() {
-	c.migrateS3Config()
-	c.migrateDatabaseConfig()
-	c.migrateScanConfig()
-	c.migrateBucketSyncConfig()
-	c.migrateLogLevel()
 }
 
 // setDefaults sets default values for configuration fields.
@@ -152,86 +117,5 @@ func (c *Config) setDefaults() {
 	}
 	if c.BucketSync.MaxRetries == 0 {
 		c.BucketSync.MaxRetries = 3 // Default to 3 retries for bucket access checks
-	}
-}
-
-// migrateS3Config migrates S3-related legacy configuration fields.
-func (c *Config) migrateS3Config() {
-	c.migrateStringField(c.S3endpoint, &c.S3.Endpoint)
-	c.migrateStringField(c.S3accessKey, &c.S3.AccessKey)
-	c.migrateStringField(c.S3ApikKey, &c.S3.APIKey)
-	c.migrateStringField(c.S3Region, &c.S3.Region)
-	c.migrateStringField(c.SsoAwsProfile, &c.S3.SsoAwsProfile)
-	c.migrateStringField(c.Bucket, &c.S3.Bucket)
-	c.migrateStringField(c.Prefix, &c.S3.Prefix)
-	c.migrateIntField(c.RestoreDays, &c.S3.RestoreDays)
-	c.migrateBoolField(c.EnableGlacierRestore, &c.S3.EnableGlacierRestore)
-	c.migrateBoolField(c.SkipBucketValidation, &c.S3.SkipBucketValidation)
-}
-
-// migrateDatabaseConfig migrates database-related legacy configuration fields.
-func (c *Config) migrateDatabaseConfig() {
-	if c.DatabaseURL != "" && c.Database.URL == "" {
-		c.Database.URL = c.DatabaseURL
-	}
-}
-
-// migrateScanConfig migrates scan-related legacy configuration fields.
-func (c *Config) migrateScanConfig() {
-	if c.EnableBackgroundScan && !c.Scan.EnableBackgroundScan {
-		c.Scan.EnableBackgroundScan = c.EnableBackgroundScan
-	}
-	if c.ScanCronSchedule != "" && c.Scan.CronSchedule == "" {
-		c.Scan.CronSchedule = c.ScanCronSchedule
-	}
-	if c.EnableInitialScan && !c.Scan.EnableInitialScan {
-		c.Scan.EnableInitialScan = c.EnableInitialScan
-	}
-	if c.EnableDeletionSync && !c.Scan.EnableDeletionSync {
-		c.Scan.EnableDeletionSync = c.EnableDeletionSync
-	}
-}
-
-// migrateBucketSyncConfig migrates bucket sync-related legacy configuration fields.
-func (c *Config) migrateBucketSyncConfig() {
-	if c.EnableBucketSync && !c.BucketSync.Enable {
-		c.BucketSync.Enable = c.EnableBucketSync
-	}
-	if c.BucketSyncThreshold != "" && c.BucketSync.SyncThreshold == "" {
-		c.BucketSync.SyncThreshold = c.BucketSyncThreshold
-	}
-	if c.BucketDeleteThreshold != "" && c.BucketSync.DeleteThreshold == "" {
-		c.BucketSync.DeleteThreshold = c.BucketDeleteThreshold
-	}
-	if c.BucketMaxRetries > 0 && c.BucketSync.MaxRetries == 0 {
-		c.BucketSync.MaxRetries = c.BucketMaxRetries
-	}
-}
-
-// migrateLogLevel migrates log level legacy configuration field.
-func (c *Config) migrateLogLevel() {
-	if c.LegacyLogLevel != "" && c.LogLevel == "" {
-		c.LogLevel = c.LegacyLogLevel
-	}
-}
-
-// migrateStringField migrates a string field from legacy to new if new is empty.
-func (c *Config) migrateStringField(legacy string, target *string) {
-	if legacy != "" && *target == "" {
-		*target = legacy
-	}
-}
-
-// migrateIntField migrates an int field from legacy to new if new is zero.
-func (c *Config) migrateIntField(legacy int, target *int) {
-	if legacy > 0 && *target == 0 {
-		*target = legacy
-	}
-}
-
-// migrateBoolField migrates a bool field from legacy to new if new is false.
-func (c *Config) migrateBoolField(legacy bool, target *bool) {
-	if legacy && !*target {
-		*target = legacy
 	}
 }

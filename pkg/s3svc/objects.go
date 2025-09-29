@@ -138,7 +138,7 @@ func (s *Service) RestoreObject(ctx context.Context, key string) error {
 		// Description:    &i,
 	}
 	p := s3.RestoreObjectInput{
-		Bucket:         &s.cfg.Bucket,
+		Bucket:         &s.cfg.S3.Bucket,
 		Key:            &key,
 		RestoreRequest: &r,
 	}
