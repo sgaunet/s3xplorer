@@ -54,15 +54,18 @@ tasks:
       - docker compose -f docker-compose.postgres.yml down
 
   image:
-    desc: "Build/push the docker image version latest"
+    desc: "Build docker image"
+    deps: 
+    - snapshot
     cmds:
-      - docker build . -t ghcr.io/sgaunet/{{.BINFILE}}:latest --push
+      - docker push ghcr.io/sgaunet/s3xplorer:latest-amd64
+      - docker tag  ghcr.io/sgaunet/s3xplorer:latest-amd64 ghcr.io/sgaunet/s3xplorer:latest
+      - docker push ghcr.io/sgaunet/s3xplorer:latest
 
   snapshot:
     desc: "Create a snapshot release"
     cmds:
       - GITLAB_TOKEN="" goreleaser --clean --snapshot
-
   release:
     desc: "Create a release"
     cmds:
