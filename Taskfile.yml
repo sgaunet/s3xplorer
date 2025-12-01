@@ -16,7 +16,7 @@ tasks:
       - go generate ./...
       - CGO_ENABLED=0 go build .
 
-  linter:
+  lint:
     desc: "Run linter"
     cmds:
       - go generate ./...
