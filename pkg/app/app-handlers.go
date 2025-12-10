@@ -324,7 +324,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 
 // HealthCheckHandler provides overall application health status.
 func (s *App) HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
-	health := make(map[string]interface{})
+	health := make(map[string]any)
 
 	// Check database health
 	if s.dbHealth != nil {
@@ -332,7 +332,7 @@ func (s *App) HealthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 		health["database"] = dbHealth
 		health["overall"] = dbHealth.Status
 	} else {
-		health["database"] = map[string]interface{}{
+		health["database"] = map[string]any{
 			"status":      "unhealthy",
 			"last_error":  "Database not configured",
 			"is_connected": false,
