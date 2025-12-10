@@ -117,8 +117,8 @@ func (s *Service) GetFolders(
 	objects, err := s.queries.ListS3Folders(ctx, database.ListS3FoldersParams{
 		BucketID: bucket.ID,
 		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),   //nolint:gosec
-		Offset:   int32(min(int64(offset), math.MaxInt32)), //nolint:gosec
+		Limit:    int32(min(int64(limit), math.MaxInt32)),
+		Offset:   int32(min(int64(offset), math.MaxInt32)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list folders: %w", err)
@@ -139,8 +139,8 @@ func (s *Service) GetObjects(
 	objects, err := s.queries.ListS3Objects(ctx, database.ListS3ObjectsParams{
 		BucketID: bucket.ID,
 		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),   //nolint:gosec
-		Offset:   int32(min(int64(offset), math.MaxInt32)), //nolint:gosec
+		Limit:    int32(min(int64(limit), math.MaxInt32)),
+		Offset:   int32(min(int64(offset), math.MaxInt32)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects: %w", err)
@@ -161,8 +161,8 @@ func (s *Service) SearchObjects(
 	objects, err := s.queries.SearchS3Objects(ctx, database.SearchS3ObjectsParams{
 		BucketID: bucket.ID,
 		Column2:  sql.NullString{String: query, Valid: true},
-		Limit:    int32(min(int64(limit), math.MaxInt32)),   //nolint:gosec
-		Offset:   int32(min(int64(offset), math.MaxInt32)), //nolint:gosec
+		Limit:    int32(min(int64(limit), math.MaxInt32)),
+		Offset:   int32(min(int64(offset), math.MaxInt32)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to search objects: %w", err)
@@ -183,8 +183,8 @@ func (s *Service) GetObjectsByPrefix(
 	objects, err := s.queries.ListS3ObjectsByPrefix(ctx, database.ListS3ObjectsByPrefixParams{
 		BucketID: bucket.ID,
 		Column2:  sql.NullString{String: prefix, Valid: true},
-		Limit:    int32(min(int64(limit), math.MaxInt32)),   //nolint:gosec
-		Offset:   int32(min(int64(offset), math.MaxInt32)), //nolint:gosec
+		Limit:    int32(min(int64(limit), math.MaxInt32)),
+		Offset:   int32(min(int64(offset), math.MaxInt32)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects by prefix: %w", err)
@@ -223,8 +223,8 @@ func (s *Service) GetDirectChildren(
 	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
 		BucketID: bucket.ID,
 		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),   //nolint:gosec
-		Offset:   int32(min(int64(offset), math.MaxInt32)), //nolint:gosec
+		Limit:    int32(min(int64(limit), math.MaxInt32)),
+		Offset:   int32(min(int64(offset), math.MaxInt32)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get direct children: %w", err)

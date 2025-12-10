@@ -142,7 +142,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	// Final progress update
 	_, err = s.queries.UpdateScanJobProgress(ctx, database.UpdateScanJobProgressParams{
 		ID:             scanJob.ID,
-		ObjectsScanned: sql.NullInt32{Int32: int32(min(objectCount, math.MaxInt32)), Valid: true}, //nolint:gosec
+		ObjectsScanned: sql.NullInt32{Int32: int32(min(objectCount, math.MaxInt32)), Valid: true},
 	})
 	if err != nil {
 		s.log.Error("Failed to update final scan job progress", slog.String("error", err.Error()))
@@ -775,10 +775,10 @@ func (s *Service) finalizeScanJob(
 		// Update final statistics including bucket sync stats (default to 0 for individual bucket scans)
 		_, updateErr := s.queries.UpdateScanJobFullStats(ctx, database.UpdateScanJobFullStatsParams{
 			ID:                        scanJobID,
-			ObjectsScanned:            sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true}, //nolint:gosec
-			ObjectsCreated:            sql.NullInt32{Int32: int32(*objectsCreated), Valid: true}, //nolint:gosec
-			ObjectsUpdated:            sql.NullInt32{Int32: int32(*objectsUpdated), Valid: true}, //nolint:gosec
-			ObjectsDeleted:            sql.NullInt32{Int32: int32(*objectsDeleted), Valid: true}, //nolint:gosec
+			ObjectsScanned:            sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true},
+			ObjectsCreated:            sql.NullInt32{Int32: int32(*objectsCreated), Valid: true},
+			ObjectsUpdated:            sql.NullInt32{Int32: int32(*objectsUpdated), Valid: true},
+			ObjectsDeleted:            sql.NullInt32{Int32: int32(*objectsDeleted), Valid: true},
 			BucketsValidated:          sql.NullInt32{Int32: 0, Valid: true}, // Individual bucket scans don't validate buckets
 			BucketsMarkedInaccessible: sql.NullInt32{Int32: 0, Valid: true},
 			BucketsCleanedUp:          sql.NullInt32{Int32: 0, Valid: true},
@@ -876,7 +876,7 @@ func (s *Service) processPageObjects(
 		if *objectCount%100 == 0 {
 			_, err := s.queries.UpdateScanJobProgress(ctx, database.UpdateScanJobProgressParams{
 				ID:             scanJobID,
-				ObjectsScanned: sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true}, //nolint:gosec
+				ObjectsScanned: sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true},
 			})
 			if err != nil {
 				s.log.Error("Failed to update scan job progress", slog.String("error", err.Error()))
