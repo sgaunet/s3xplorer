@@ -2,6 +2,7 @@ package views
 
 import (
     "time"
+    "github.com/sgaunet/s3xplorer/pkg/config"
 )
 
 templ RenderDatabaseUnavailable() {
@@ -11,45 +12,58 @@ templ RenderDatabaseUnavailable() {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Database Unavailable - s3xplorer</title>
-    <link rel="stylesheet" href="/static/output.css" />
+    <link rel="stylesheet" href="/static/app.css?v=2" />
+    <script src="/static/app.js?v=2" defer></script>
     <meta http-equiv="refresh" content="30" />
   </head>
-  <body class="bg-dark">
-    <h1 class="text-4xl text-gray-50 text-center pt-20">
-      s3xplorer
-    </h1>
-    <div class="container mx-auto px-4 py-8 text-center">
-      <div class="max-w-md mx-auto bg-red-600 bg-opacity-20 border border-red-500 rounded-lg p-6">
-        <div class="mb-4">
-          <svg class="mx-auto h-16 w-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-          </svg>
+  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
+    @SkipToContent()
+    @MenuWithConfig(config.Config{}, "")
+
+    <main id="main-content" role="main" class="py-8">
+      <div class="max-w-4xl mx-auto px-6">
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+          <header class="text-center mb-6">
+            <div class="flex items-center justify-center mb-4">
+              @Icon("alert-triangle", "w-16 h-16 text-red-600 dark:text-red-400")
+            </div>
+            <h1 class="text-3xl font-bold text-red-600 dark:text-red-400 mb-2">Database Unavailable</h1>
+            <p class="text-gray-600 dark:text-gray-400">
+              The database is currently unavailable. S3xplorer is running in degraded mode.
+            </p>
+          </header>
+
+          <div class="space-y-4 mb-6">
+            <div class="flex items-start gap-3">
+              @Icon("check-circle", "w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5")
+              <span class="text-gray-700 dark:text-gray-300">S3 direct operations are still available</span>
+            </div>
+            <div class="flex items-start gap-3">
+              @Icon("x-circle", "w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5")
+              <span class="text-gray-700 dark:text-gray-300">Bucket scanning and metadata features are disabled</span>
+            </div>
+            <div class="flex items-start gap-3">
+              @Icon("loader", "w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5 animate-spin")
+              <span class="text-gray-700 dark:text-gray-300">The application will automatically reconnect when the database is available</span>
+            </div>
+          </div>
+
+          <footer class="flex flex-col items-center gap-3">
+            <div class="flex gap-3">
+              <a href="/health/database" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                @Icon("database", "w-4 h-4")
+                <span>Check Database Status</span>
+              </a>
+              <a href="/" class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
+                @Icon("home", "w-4 h-4")
+                <span>Return to Home</span>
+              </a>
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 italic">This page will auto-refresh every 30 seconds</p>
+          </footer>
         </div>
-        <h2 class="text-2xl font-bold text-red-400 mb-4">Database Unavailable</h2>
-        <p class="text-gray-300 mb-4">
-          The database is currently unavailable. S3xplorer is running in degraded mode.
-        </p>
-        <p class="text-gray-400 text-sm mb-6">
-          • S3 direct operations are still available<br/>
-          • Bucket scanning and metadata features are disabled<br/>
-          • The application will automatically reconnect when the database is available
-        </p>
-        <div class="space-y-3">
-          <a href="/health/database"
-             class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
-            Check Database Status
-          </a>
-          <br/>
-          <a href="/"
-             class="inline-block bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
-            Return to Home
-          </a>
-        </div>
-        <p class="text-gray-500 text-xs mt-4">
-          This page will auto-refresh every 30 seconds
-        </p>
       </div>
-    </div>
+    </main>
   </body>
 </html>
 }
@@ -61,40 +75,55 @@ templ RenderDatabaseHealthy(lastCheck time.Time) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Database Health - s3xplorer</title>
-    <link rel="stylesheet" href="/static/output.css" />
+    <link rel="stylesheet" href="/static/app.css?v=2" />
+    <script src="/static/app.js?v=2" defer></script>
   </head>
-  <body class="bg-dark">
-    <h1 class="text-4xl text-gray-50 text-center pt-20">
-      s3xplorer
-    </h1>
-    <div class="container mx-auto px-4 py-8 text-center">
-      <div class="max-w-md mx-auto bg-green-600 bg-opacity-20 border border-green-500 rounded-lg p-6">
-        <div class="mb-4">
-          <svg class="mx-auto h-16 w-16 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-        </div>
-        <h2 class="text-2xl font-bold text-green-400 mb-4">Database Healthy</h2>
-        <p class="text-gray-300 mb-4">
-          The database connection is working correctly.
-        </p>
-        <div class="text-gray-400 text-sm mb-6">
-          <p><strong>Last Check:</strong> { lastCheck.Format("2006-01-02 15:04:05 UTC") }</p>
-          <p class="mt-2">All s3xplorer features are fully operational</p>
-        </div>
-        <div class="space-y-3">
-          <a href="/health"
-             class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
-            View Full Health Status
-          </a>
-          <br/>
-          <a href="/"
-             class="inline-block bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
-            Return to Home
-          </a>
+  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
+    @SkipToContent()
+    @MenuWithConfig(config.Config{}, "")
+
+    <main id="main-content" role="main" class="py-8">
+      <div class="max-w-4xl mx-auto px-6">
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+          <header class="text-center mb-6">
+            <div class="flex items-center justify-center mb-4">
+              @Icon("check-circle", "w-16 h-16 text-green-600 dark:text-green-400")
+            </div>
+            <h1 class="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">Database Healthy</h1>
+            <p class="text-gray-600 dark:text-gray-400">
+              The database connection is working correctly.
+            </p>
+          </header>
+
+          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6">
+            <div class="text-center">
+              <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Last Check</p>
+              <p class="text-lg font-semibold text-gray-900 dark:text-white">
+                { lastCheck.Format("2006-01-02 15:04:05 UTC") }
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center gap-2 mb-6 text-green-600 dark:text-green-400">
+            @Icon("check-circle", "w-5 h-5")
+            <span class="font-medium">All s3xplorer features are fully operational</span>
+          </div>
+
+          <footer class="flex flex-col items-center gap-3">
+            <div class="flex gap-3">
+              <a href="/health" class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                @Icon("info", "w-4 h-4")
+                <span>View Full Health Status</span>
+              </a>
+              <a href="/" class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
+                @Icon("home", "w-4 h-4")
+                <span>Return to Home</span>
+              </a>
+            </div>
+          </footer>
         </div>
       </div>
-    </div>
+    </main>
   </body>
 </html>
 }

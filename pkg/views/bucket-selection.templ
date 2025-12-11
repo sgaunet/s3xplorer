@@ -13,53 +13,102 @@ templ BucketSelection(buckets []dto.Bucket, currentBucket string, cfg config.Con
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>s3xplorer - Select Bucket</title>
-    <link rel="stylesheet" href="/static/pico.css" />
+    <link rel="stylesheet" href="/static/app.css?v=2" />
+    <script src="/static/app.js?v=2" defer></script>
   </head>
-  <body>
-    @MenuWithConfig(cfg)
-       
-    <div class="container-fluid">
-      <h2>Select a bucket to explore</h2>
-      if currentBucket != "" {
-        <div class="notice">
-          <p>Current bucket: <strong>{ currentBucket }</strong></p>
-        </div>
-      }
-      <table class="table table-bordered table-light table-hover table-striped">
-        <thead>
-          <tr>
-            <th>Bucket Name</th>
-            <th>Status</th>
-            <th>Creation Date</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          for _, bucket := range buckets {
-            <tr>
-              <td>{ bucket.Name }</td>
-              <td>
-                if bucket.IsAccessible {
-                  <span style="color: green;">✓ Accessible</span>
-                } else {
-                  <span style="color: red;">✗ Inaccessible</span>
-                }
-              </td>
-              <td>{ bucket.CreationDate.Format(time.RFC3339) }</td>
-              <td>
-                <a 
-                  href={ templ.URL(fmt.Sprintf("/?switchBucket=%s", bucket.Name)) } 
-                  role="button"
-                  class="outline"
-                >
-                  Select
-                </a>
-              </td>
-            </tr>
+  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
+    @SkipToContent()
+    @MenuWithConfig(cfg, "buckets")
+
+    <main id="main-content" role="main" class="py-8">
+      <div class="max-w-7xl mx-auto px-6">
+        <div class="mb-8">
+          <h2 class="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            @Icon("database", "w-6 h-6")
+            <span>Select a bucket to explore</span>
+          </h2>
+          if currentBucket != "" {
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <p class="text-sm text-blue-800 dark:text-blue-300">
+                <strong>Current bucket:</strong> { currentBucket }
+              </p>
+            </div>
           }
-        </tbody>
-      </table>
-    </div>
+        </div>
+
+        if len(buckets) == 0 {
+          @EmptyState(
+            "database",
+            "No buckets available",
+            "No S3 buckets are currently accessible. The background scanner may not have run yet, or all buckets are inaccessible with current credentials.",
+          )
+          <div class="flex justify-center mt-8">
+            <a href="/" class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
+              Return to Home
+            </a>
+          </div>
+        } else {
+          <div class="overflow-x-auto">
+            <table role="grid" class="w-full border-collapse" aria-label="Available S3 buckets">
+              <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <tr role="row">
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Bucket Name</th>
+                  <th class="w-40 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Status</th>
+                  <th class="w-48 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Created</th>
+                  <th class="w-32 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Action</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
+                for _, bucket := range buckets {
+                  <tr role="row" class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                    <td class="px-4 py-4" role="gridcell">
+                      <div class="font-semibold text-gray-900 dark:text-white">{ bucket.Name }</div>
+                      if bucket.Region != "" {
+                        <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                          Region: { bucket.Region }
+                        </div>
+                      }
+                    </td>
+                    <td class="px-4 py-4" role="gridcell">
+                      if bucket.IsAccessible {
+                        @StatusBadge("accessible", "")
+                      } else {
+                        @StatusBadge("inaccessible", bucket.AccessError)
+                      }
+                    </td>
+                    <td class="px-4 py-4" role="gridcell">
+                      <div>
+                        <time class="text-gray-900 dark:text-white" datetime={ bucket.CreationDate.Format(time.RFC3339) } title={ bucket.CreationDate.Format(time.RFC3339) }>
+                          { formatRelativeTime(bucket.CreationDate) }
+                        </time>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          { formatDateTime(bucket.CreationDate) }
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-4" role="gridcell">
+                      if bucket.IsAccessible {
+                        <a
+                          href={ templ.URL(fmt.Sprintf("/?switchBucket=%s", bucket.Name)) }
+                          class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                          aria-label={ fmt.Sprintf("Select bucket %s", bucket.Name) }
+                        >
+                          Select
+                        </a>
+                      } else {
+                        <button disabled class="inline-flex items-center justify-center px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 text-sm font-medium rounded-lg cursor-not-allowed" aria-label="Bucket unavailable">
+                          Unavailable
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </main>
   </body>
 </html>
 }

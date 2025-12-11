@@ -20,3 +20,7 @@ linters:
     - tagliatelle
     - noinlineerr
     - godoclint
+    - ireturn        # templ.Component return types are expected
+    - contextcheck   # templ ComponentFunc context handling is framework-managed
+    - revive         # templ ComponentFunc ctx parameters appear unused but are required
+    - wrapcheck      # External package errors don't need wrapping in view layer

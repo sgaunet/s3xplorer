@@ -13,7 +13,7 @@ s3xplorer is a web interface to parse a S3 bucket.
 
 In the beginning, this project was a POC to play with AWS golang SDK v2 and the minio library. It's quite basic, it still needs refactor and improvements...
 
-![s3xplorer](img/v0.1.0.png)
+![Light mode](docs/light.png) ![Dark mode](docs/dark.png)
 
 ## Major Changes in v0.5.0
 

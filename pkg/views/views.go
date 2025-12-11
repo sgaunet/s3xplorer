@@ -2,6 +2,7 @@ package views
 
 import (
 	"embed"
+	"io/fs"
 	"net/http"
 )
 
@@ -17,6 +18,11 @@ var faviconFS []byte
 var StaticHandler http.Handler
 
 func init() {
-	var staticFS = http.FS(staticCSS)
-	StaticHandler = http.FileServer(staticFS)
+	// Create a sub-filesystem rooted at "static/" directory
+	staticSubFS, err := fs.Sub(staticCSS, "static")
+	if err != nil {
+		panic(err)
+	}
+	// Strip "/static" prefix and serve from the sub-filesystem
+	StaticHandler = http.StripPrefix("/static", http.FileServer(http.FS(staticSubFS)))
 }

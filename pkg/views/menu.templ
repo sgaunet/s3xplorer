@@ -2,35 +2,88 @@ package views
 
 import "github.com/sgaunet/s3xplorer/pkg/config"
 
-templ Menu() {
-  <div class="container-fluid" styles="margin:1 px;">
-    <nav styles="margin:1 px;">
-      <ul>
-        <li><strong>s3xplorer</strong></li>
-      </ul>
-      <ul>
-        <li><a href="/">index</a></li>
-        <li><a href="/search">search</a></li>
-        <li><a href="/buckets">change bucket</a></li>
-      </ul>
-    </nav>
-  </div>
+// MenuWithConfig is a menu template that shows or hides the bucket link based on config
+templ MenuWithConfig(cfg config.Config, activePage string) {
+	<header class="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+		<nav class="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto" aria-label="Main navigation">
+			<a href="/" class="inline-flex items-center gap-2 text-gray-900 dark:text-gray-100 font-semibold text-lg hover:text-blue-600 dark:hover:text-blue-400 transition-colors" aria-label="s3xplorer home">
+				@Icon("folder-archive", "w-5 h-5")
+				<span>s3xplorer</span>
+			</a>
+			<ul class="flex items-center gap-1" role="list">
+				<li role="listitem">
+					<a
+						href="/"
+						class={
+							templ.KV("inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2", true),
+							templ.KV("text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20", activePage == "home"),
+							templ.KV("text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800", activePage != "home"),
+						}
+						if activePage == "home" {
+							aria-current="page"
+						}
+						aria-label="Home page"
+					>
+						@Icon("home", "w-4 h-4")
+						<span>Home</span>
+					</a>
+				</li>
+				<li role="listitem">
+					<a
+						href="/search"
+						class={
+							templ.KV("inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2", true),
+							templ.KV("text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20", activePage == "search"),
+							templ.KV("text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800", activePage != "search"),
+						}
+						if activePage == "search" {
+							aria-current="page"
+						}
+						aria-label="Search files"
+					>
+						@Icon("search", "w-4 h-4")
+						<span>Search</span>
+					</a>
+				</li>
+				if !cfg.S3.BucketLocked {
+					<li role="listitem">
+						<a
+							href="/buckets"
+							class={
+								templ.KV("inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2", true),
+								templ.KV("text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20", activePage == "buckets"),
+								templ.KV("text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800", activePage != "buckets"),
+							}
+							if activePage == "buckets" {
+								aria-current="page"
+							}
+							aria-label="Browse buckets"
+						>
+							@Icon("database", "w-4 h-4")
+							<span>Buckets</span>
+						</a>
+					</li>
+				}
+			</ul>
+			<button
+				id="theme-toggle"
+				class="inline-flex items-center justify-center w-10 h-10 rounded-md text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+				aria-label="Toggle dark mode"
+				onclick="toggleTheme()"
+				type="button"
+			>
+				<span class="hidden dark:inline-block">
+					@Icon("moon", "w-5 h-5")
+				</span>
+				<span class="inline-block dark:hidden">
+					@Icon("sun", "w-5 h-5")
+				</span>
+			</button>
+		</nav>
+	</header>
 }
 
-// MenuWithConfig is a menu template that shows or hides the bucket link based on config
-templ MenuWithConfig(cfg config.Config) {
-  <div class="container-fluid" styles="margin:1 px;">
-    <nav styles="margin:1 px;">
-      <ul>
-        <li><strong>s3xplorer</strong></li>
-      </ul>
-      <ul>
-        <li><a href="/">index</a></li>
-        <li><a href="/search">search</a></li>
-        if !cfg.S3.BucketLocked {
-          <li><a href="/buckets">change bucket</a></li>
-        }
-      </ul>
-    </nav>
-  </div>
+// Menu is kept for backward compatibility but now uses MenuWithConfig
+templ Menu() {
+	@MenuWithConfig(config.Config{S3: config.S3Config{BucketLocked: false}}, "")
 }

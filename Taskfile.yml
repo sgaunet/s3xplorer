@@ -2,6 +2,10 @@
 version: '3'
 vars:
   BINFILE: s3xplorer
+  TAILWIND_VERSION: v3.4.17
+  TAILWIND_OS: '{{if eq OS "darwin"}}macos{{else if eq OS "windows"}}windows{{else}}linux{{end}}'
+  TAILWIND_ARCH: '{{if eq ARCH "amd64"}}x64{{else}}arm64{{end}}'
+  TAILWIND_EXT: '{{if eq OS "windows"}}.exe{{else}}{{end}}'
 
 tasks:
   default:
@@ -9,8 +13,42 @@ tasks:
     cmds:
       - task -a
 
+  tailwind:download:
+    desc: "Download Tailwind CSS standalone binary"
+    silent: true
+    cmds:
+      - mkdir -p bin
+      - curl -sL -o bin/tailwindcss{{.TAILWIND_EXT}} https://github.com/tailwindlabs/tailwindcss/releases/download/{{.TAILWIND_VERSION}}/tailwindcss-{{.TAILWIND_OS}}-{{.TAILWIND_ARCH}}{{.TAILWIND_EXT}}
+      - chmod +x bin/tailwindcss{{.TAILWIND_EXT}}
+    status:
+      - test -f bin/tailwindcss{{.TAILWIND_EXT}}
+
+  css:build:
+    desc: "Build Tailwind CSS"
+    deps:
+      - tailwind:download
+    sources:
+      - pkg/views/**/*.templ
+      - pkg/views/static/src/input.css
+    generates:
+      - pkg/views/static/app.css
+    cmds:
+      - ./bin/tailwindcss{{.TAILWIND_EXT}} -i pkg/views/static/src/input.css -o pkg/views/static/app.css --minify
+
+  css:watch:
+    desc: "Watch and rebuild Tailwind CSS"
+    deps:
+      - tailwind:download
+    sources:
+      - pkg/views/**/*.templ
+      - pkg/views/static/src/input.css
+    cmds:
+      - ./bin/tailwindcss{{.TAILWIND_EXT}} -i pkg/views/static/src/input.css -o pkg/views/static/app.css --watch
+
   build:
     desc: "Build the binary"
+    deps:
+      - css:build
     cmds:
       - go mod download
       - go generate ./...
@@ -33,6 +71,7 @@ tasks:
     deps: 
     - minio
     cmds:
+      - go generate ./...
       - go run . -f conf-examples/config-minio.yaml
 
   run-postgres:
