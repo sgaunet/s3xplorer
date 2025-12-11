@@ -16,6 +16,9 @@ const (
 	hoursPerWeek  = hoursPerDay * 7
 	hoursPerMonth = hoursPerDay * 30
 	hoursPerYear  = hoursPerDay * 365
+
+	// etagDisplayLength is the maximum length for displaying ETags.
+	etagDisplayLength = 40
 )
 
 // formatRelativeTime converts a time.Time to a human-readable relative time string.
@@ -170,13 +173,16 @@ func convertIconSizeToTailwind(class string) string {
 
 	// Replace standalone "icon" with default size (but preserve icon-* variants)
 	// Only replace if it's the whole word "icon" not part of another class
-	if class == "icon" {
+	switch {
+	case class == "icon":
 		class = "w-5 h-5"
-	} else if strings.HasPrefix(class, "icon ") {
-		class = "w-5 h-5 " + strings.TrimPrefix(class, "icon ")
-	} else if strings.HasSuffix(class, " icon") {
-		class = strings.TrimSuffix(class, " icon") + " w-5 h-5"
-	} else if strings.Contains(class, " icon ") {
+	case strings.HasPrefix(class, "icon "):
+		after, _ := strings.CutPrefix(class, "icon ")
+		class = "w-5 h-5 " + after
+	case strings.HasSuffix(class, " icon"):
+		before, _ := strings.CutSuffix(class, " icon")
+		class = before + " w-5 h-5"
+	case strings.Contains(class, " icon "):
 		class = strings.ReplaceAll(class, " icon ", " w-5 h-5 ")
 	}
 
@@ -240,22 +246,26 @@ func StatusBadge(status string, message string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		switch status {
 		case "accessible":
+			badgeClasses := "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium " +
+				"bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
 			_, err := fmt.Fprintf(w,
-				`<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" role="status">
+				`<span class="%s" role="status">
 					<svg class="inline-block w-4 h-4" aria-hidden="true"><use href="/static/icons.svg#check-circle"></use></svg>
 					<span>Accessible</span>
-				</span>`)
+				</span>`, badgeClasses)
 			return err
 		case "inaccessible":
-			html := `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" role="status">
+			badgeClasses := "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium " +
+				"bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+			html := fmt.Sprintf(`<span class="%s" role="status">
 				<svg class="inline-block w-4 h-4" aria-hidden="true"><use href="/static/icons.svg#x-circle"></use></svg>
 				<span>Inaccessible</span>
-			</span>`
+			</span>`, badgeClasses)
 
 			if message != "" {
 				html += fmt.Sprintf(`<div class="mt-1 text-xs text-gray-600 dark:text-gray-400" title="%s">
 					<small>%s</small>
-				</div>`, message, truncateETag(message, 40))
+				</div>`, message, truncateETag(message, etagDisplayLength))
 			}
 
 			_, err := fmt.Fprintf(w, "%s", html)
@@ -270,10 +280,12 @@ func StatusBadge(status string, message string) templ.Component {
 // The link is visually hidden but becomes visible when focused via keyboard.
 func SkipToContent() templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		linkClasses := "sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 " +
+			"focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:font-medium"
 		_, err := fmt.Fprintf(w,
-			`<a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:font-medium">
+			`<a href="#main-content" class="%s">
                 Skip to main content
-            </a>`)
+            </a>`, linkClasses)
 		return err
 	})
 }
@@ -318,7 +330,8 @@ Secondary Button (Neutral action):
     text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium
 
   Example usage:
-    <button class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">
+    <button class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
+                   text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">
       Cancel
     </button>
 
@@ -329,7 +342,8 @@ Action Button (Icon + text in lists):
     px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200
 
   With icon example:
-    <button class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-1.5 rounded-md text-sm font-medium">
+    <button class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200
+                   dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-1.5 rounded-md text-sm font-medium">
       @Icon("download", "w-4 h-4")
       <span>Download</span>
     </button>
