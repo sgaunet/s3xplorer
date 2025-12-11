@@ -10,7 +10,7 @@ s3:
   bucket: example
   # set the prefix if you want to restrict the access to a specific folder
   # don't forget to add the trailing slash at the end
-  prefix: rando/
+  prefix: ""
   # Number of days that objects will be restored from Glacier (default: 2 if not specified)
   restore_days: 7
   # Whether to enable the Glacier restore button (default: false if not specified)
