@@ -1,0 +1,89 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"github.com/sgaunet/s3xplorer/pkg/dto"
+)
+
+templ PaginationControls(paging *dto.PaginationInfo, folderPath string) {
+	if paging.TotalPages > 1 {
+		<nav role="navigation" aria-label="Pagination" class="mt-6 flex items-center justify-between border-t border-gray-200 dark:border-gray-800 pt-6">
+			<!-- Mobile View -->
+			<div class="flex-1 flex justify-between sm:hidden">
+				if paging.HasPrevious {
+					<a
+						href={ templ.URL(fmt.Sprintf("/?folder=%s&page=%d", url.QueryEscape(folderPath), paging.CurrentPage-1)) }
+						class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+						aria-label="Previous page"
+					>
+						Previous
+					</a>
+				} else {
+					<span class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm font-medium rounded-md text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 cursor-not-allowed">
+						Previous
+					</span>
+				}
+				if paging.HasNext {
+					<a
+						href={ templ.URL(fmt.Sprintf("/?folder=%s&page=%d", url.QueryEscape(folderPath), paging.CurrentPage+1)) }
+						class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+						aria-label="Next page"
+					>
+						Next
+					</a>
+				} else {
+					<span class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm font-medium rounded-md text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 cursor-not-allowed">
+						Next
+					</span>
+				}
+			</div>
+
+			<!-- Desktop View -->
+			<div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+				<div>
+					<p class="text-sm text-gray-700 dark:text-gray-300">
+						Page <span class="font-medium text-gray-900 dark:text-white">{ fmt.Sprintf("%d", paging.CurrentPage) }</span> of <span class="font-medium text-gray-900 dark:text-white">{ fmt.Sprintf("%d", paging.TotalPages) }</span>
+						<span class="mx-2">•</span>
+						<span class="font-medium text-gray-900 dark:text-white">{ fmt.Sprintf("%d", paging.TotalItems) }</span> items
+					</p>
+				</div>
+				<div>
+					<nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination navigation">
+						if paging.HasPrevious {
+							<a
+								href={ templ.URL(fmt.Sprintf("/?folder=%s&page=%d", url.QueryEscape(folderPath), paging.CurrentPage-1)) }
+								class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+								aria-label="Previous page"
+							>
+								<span class="sr-only">Previous</span>
+								Previous
+							</a>
+						} else {
+							<span class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-sm font-medium text-gray-400 dark:text-gray-600 cursor-not-allowed">
+								<span class="sr-only">Previous</span>
+								Previous
+							</span>
+						}
+
+						if paging.HasNext {
+							<a
+								href={ templ.URL(fmt.Sprintf("/?folder=%s&page=%d", url.QueryEscape(folderPath), paging.CurrentPage+1)) }
+								class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+								aria-label="Next page"
+							>
+								<span class="sr-only">Next</span>
+								Next
+							</a>
+						} else {
+							<span class="relative inline-flex items-center px-4 py-2 rounded-r-md border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-sm font-medium text-gray-400 dark:text-gray-600 cursor-not-allowed">
+								<span class="sr-only">Next</span>
+								Next
+							</span>
+						}
+					</nav>
+				</div>
+			</div>
+		</nav>
+	}
+}

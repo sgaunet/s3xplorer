@@ -135,31 +135,58 @@ func (s *App) getAndValidateFolder(r *http.Request) string {
 	return folderPath
 }
 
-// loadAndRenderBucketContents fetches and renders the bucket contents using hierarchical navigation.
-func (s *App) loadAndRenderBucketContents(ctx context.Context, w http.ResponseWriter, folderPath string) error {
-	// Get direct children (immediate subfolders and files) using hierarchical navigation
-	const maxDirectChildren = 1000
-	objects, err := s.dbsvc.GetDirectChildren(ctx, s.cfg.S3.Bucket, folderPath, maxDirectChildren, 0)
+// loadAndRenderBucketContents fetches and renders the bucket contents using hierarchical navigation with pagination.
+func (s *App) loadAndRenderBucketContents(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	folderPath string,
+) error {
+	// Parse pagination parameters
+	page, err := ParsePaginationParams(r)
 	if err != nil {
-		s.log.Error("Error getting direct children", slog.String("error", err.Error()))
-		return fmt.Errorf("failed to get direct children: %w", err)
+		// Invalid page parameter, redirect to page 1
+		s.log.Warn("Invalid page parameter", slog.String("error", err.Error()))
+		redirectURL := fmt.Sprintf("/?folder=%s&page=1", folderPath)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return nil
 	}
 
-	// Separate folders and files for proper ordering
-	var folders, files []dto.S3Object
-	for _, obj := range objects {
-		if obj.IsFolder {
-			folders = append(folders, obj)
-		} else {
-			files = append(files, obj)
-		}
+	// Get paginated direct children (immediate subfolders and files)
+	const pageSize = 50
+	folders, files, totalFolders, totalFiles, err := s.dbsvc.GetDirectChildrenPaginated(
+		ctx, s.cfg.S3.Bucket, folderPath, page, pageSize,
+	)
+	if err != nil {
+		s.log.Error("Error getting paginated children", slog.String("error", err.Error()))
+		return fmt.Errorf("failed to get paginated children: %w", err)
+	}
+
+	// Calculate pagination metadata
+	totalItems := totalFolders + totalFiles
+	paging := dto.NewPaginationInfo(totalItems, pageSize, page)
+
+	// Validate page number against actual total pages
+	validPage := ValidatePageNumber(page, paging.TotalPages)
+	if page != validPage {
+		// Page is out of bounds, redirect to page 1
+		s.log.Debug("Page out of bounds, redirecting",
+			slog.Int("requested", page),
+			slog.Int("valid", validPage),
+			slog.Int("totalPages", paging.TotalPages))
+		redirectURL := fmt.Sprintf("/?folder=%s&page=1", folderPath)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return nil
 	}
 
 	// Build breadcrumb navigation
 	breadcrumbs := s.dbsvc.BuildBreadcrumbs(folderPath)
 
-	// Render the index page with hierarchical navigation
-	if err := views.RenderIndexHierarchical(folders, files, folderPath, breadcrumbs, s.cfg).Render(ctx, w); err != nil {
+	// Render the index page with hierarchical navigation and pagination
+	err = views.RenderIndexHierarchical(
+		folders, files, folderPath, breadcrumbs, s.cfg, &paging,
+	).Render(ctx, w)
+	if err != nil {
 		s.log.Error("Failed to render index page", slog.String("error", err.Error()))
 		return fmt.Errorf("error rendering index page: %w", err)
 	}
@@ -196,8 +223,8 @@ func (s *App) IndexBucket(w http.ResponseWriter, r *http.Request) {
 	// Get and validate folder path
 	folderPath := s.getAndValidateFolder(r)
 
-	// Load and render bucket contents
-	err = s.loadAndRenderBucketContents(ctx, w, folderPath)
+	// Load and render bucket contents with pagination
+	err = s.loadAndRenderBucketContents(ctx, w, r, folderPath)
 	if err != nil {
 		s.renderErrorPage(ctx, w, err.Error())
 	}

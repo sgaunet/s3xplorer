@@ -30,16 +30,28 @@ WHERE bucket_id = $1
 
 -- name: ListS3Folders :many
 SELECT * FROM s3_objects
-WHERE bucket_id = $1 
-  AND ($2 = '' OR prefix = $2)
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
   AND is_folder = true
 ORDER BY key ASC
 LIMIT $3 OFFSET $4;
 
 -- name: ListS3Files :many
 SELECT * FROM s3_objects
-WHERE bucket_id = $1 
-  AND ($2 = '' OR prefix = $2)
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
   AND is_folder = false
 ORDER BY key ASC
 LIMIT $3 OFFSET $4;
@@ -147,3 +159,33 @@ WHERE bucket_id = $1 AND marked_for_deletion = TRUE;
 -- Count objects marked for deletion
 SELECT COUNT(*) FROM s3_objects
 WHERE bucket_id = $1 AND marked_for_deletion = TRUE;
+
+-- name: CountDirectChildrenFolders :one
+-- Count only immediate child folders under a specific prefix
+-- For pagination - not recursive
+SELECT COUNT(*) FROM s3_objects
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND key != $2
+  AND is_folder = true;
+
+-- name: CountDirectChildrenFiles :one
+-- Count only immediate child files under a specific prefix
+-- For pagination - not recursive
+SELECT COUNT(*) FROM s3_objects
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND key != $2
+  AND is_folder = false;
