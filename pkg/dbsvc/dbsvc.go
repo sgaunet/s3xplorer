@@ -233,6 +233,95 @@ func (s *Service) GetDirectChildren(
 	return s.convertToDTO(objects), nil
 }
 
+// CountDirectChildren returns the count of immediate child folders and files under a prefix.
+// This is used for pagination to determine total items before fetching.
+//
+//nolint:nonamedreturns // Named returns improve readability for multiple int64 return values
+func (s *Service) CountDirectChildren(
+	ctx context.Context,
+	bucketName, prefix string,
+) (folderCount, fileCount int64, err error) {
+	bucket, err := s.queries.GetBucket(ctx, bucketName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	folderCount, err = s.queries.CountDirectChildrenFolders(ctx, database.CountDirectChildrenFoldersParams{
+		BucketID: bucket.ID,
+		Column2:  prefix,
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to count folders: %w", err)
+	}
+
+	fileCount, err = s.queries.CountDirectChildrenFiles(ctx, database.CountDirectChildrenFilesParams{
+		BucketID: bucket.ID,
+		Column2:  prefix,
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to count files: %w", err)
+	}
+
+	return folderCount, fileCount, nil
+}
+
+// GetDirectChildrenPaginated returns paginated immediate children with folder-first ordering.
+// It returns separate slices for folders and files, along with total counts for pagination.
+//
+//nolint:nonamedreturns // Named returns improve readability for complex multi-value return signature
+func (s *Service) GetDirectChildrenPaginated(
+	ctx context.Context,
+	bucketName, prefix string,
+	page, pageSize int,
+) (folders, files []dto.S3Object, totalFolders, totalFiles int64, err error) {
+	// Get bucket ID
+	bucket, err := s.queries.GetBucket(ctx, bucketName)
+	if err != nil {
+		return nil, nil, 0, 0, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	// Get total counts
+	totalFolders, totalFiles, err = s.CountDirectChildren(ctx, bucketName, prefix)
+	if err != nil {
+		return nil, nil, 0, 0, fmt.Errorf("failed to count children: %w", err)
+	}
+
+	// Calculate offsets using pagination logic
+	folderLimit, folderOffset, fileLimit, fileOffset := CalculateFolderFileOffsets(
+		page, pageSize, totalFolders, totalFiles,
+	)
+
+	// Fetch folders if needed
+	if folderLimit > 0 {
+		dbFolders, err := s.queries.ListS3Folders(ctx, database.ListS3FoldersParams{
+			BucketID: bucket.ID,
+			Column2:  prefix,
+			Limit:    int32(min(int64(folderLimit), math.MaxInt32)),
+			Offset:   int32(min(int64(folderOffset), math.MaxInt32)),
+		})
+		if err != nil {
+			return nil, nil, 0, 0, fmt.Errorf("failed to list folders: %w", err)
+		}
+		folders = s.convertToDTO(dbFolders)
+	}
+
+	// Fetch files if needed
+	if fileLimit > 0 {
+		dbFiles, err := s.queries.ListS3Files(ctx, database.ListS3FilesParams{
+			BucketID: bucket.ID,
+			Column2:  prefix,
+			Limit:    int32(min(int64(fileLimit), math.MaxInt32)),
+			Offset:   int32(min(int64(fileOffset), math.MaxInt32)),
+		})
+		if err != nil {
+			return nil, nil, 0, 0, fmt.Errorf("failed to list files: %w", err)
+		}
+		files = s.convertToDTO(dbFiles)
+	}
+
+	return folders, files, totalFolders, totalFiles, nil
+}
+
 // GetBreadcrumbPath returns parent folders for breadcrumb navigation.
 func (s *Service) GetBreadcrumbPath(ctx context.Context, bucketName, currentPath string) ([]dto.S3Object, error) {
 	bucket, err := s.queries.GetBucket(ctx, bucketName)
