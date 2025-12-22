@@ -31,7 +31,11 @@ type S3Config struct {
 
 // DatabaseConfig contains database-related configuration.
 type DatabaseConfig struct {
-	URL string `yaml:"url"`
+	URL              string `yaml:"url"`
+	MaxOpenConns     int    `yaml:"max_open_conns"`
+	MaxIdleConns     int    `yaml:"max_idle_conns"`
+	ConnMaxLifetime  string `yaml:"conn_max_lifetime"`
+	ConnMaxIdleTime  string `yaml:"conn_max_idle_time"`
 }
 
 // ScanConfig contains scanning-related configuration.
@@ -107,7 +111,21 @@ func (c *Config) setDefaults() {
 	if c.Database.URL == "" {
 		c.Database.URL = "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
 	}
-	
+
+	// Set default database pool settings
+	if c.Database.MaxOpenConns == 0 {
+		c.Database.MaxOpenConns = 25
+	}
+	if c.Database.MaxIdleConns == 0 {
+		c.Database.MaxIdleConns = 5
+	}
+	if c.Database.ConnMaxLifetime == "" {
+		c.Database.ConnMaxLifetime = "5m"
+	}
+	if c.Database.ConnMaxIdleTime == "" {
+		c.Database.ConnMaxIdleTime = "1m"
+	}
+
 	// Set default bucket sync configuration
 	if c.BucketSync.SyncThreshold == "" {
 		c.BucketSync.SyncThreshold = "24h" // Mark as inaccessible after 24 hours

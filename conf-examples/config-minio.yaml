@@ -22,6 +22,11 @@ s3:
 # Database Configuration
 database:
   url: "postgres://postgres:postgres@localhost:5432/s3xplorer?sslmode=disable"
+  # Connection pool settings (optional, defaults shown below)
+  # max_open_conns: 25          # Maximum concurrent database connections
+  # max_idle_conns: 5           # Idle connections to keep alive
+  # conn_max_lifetime: "5m"     # Maximum connection lifetime
+  # conn_max_idle_time: "1m"    # Maximum idle time before closing
 
 # Background Scanning Configuration
 scan:
