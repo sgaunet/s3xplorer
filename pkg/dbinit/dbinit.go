@@ -15,23 +15,25 @@ import (
 	"github.com/amacneil/dbmate/v2/pkg/dbmate"
 	_ "github.com/amacneil/dbmate/v2/pkg/driver/postgres" // PostgreSQL driver for dbmate
 	_ "github.com/lib/pq"                                 // PostgreSQL driver
+
+	configapp "github.com/sgaunet/s3xplorer/pkg/config"
 )
 
 //go:embed migrations
 var migrations embed.FS
 
 // InitializeDatabase initializes the database using embedded migrations.
-func InitializeDatabase(ctx context.Context, databaseURL string, logger *slog.Logger) (*sql.DB, error) {
+func InitializeDatabase(ctx context.Context, dbConfig configapp.DatabaseConfig, logger *slog.Logger) (*sql.DB, error) {
 	const (
 		defaultMaxRetries = 3
 		defaultBaseDelay  = 2 * time.Second
 	)
-	return InitializeDatabaseWithRetry(ctx, databaseURL, logger, defaultMaxRetries, defaultBaseDelay)
+	return InitializeDatabaseWithRetry(ctx, dbConfig, logger, defaultMaxRetries, defaultBaseDelay)
 }
 
 // InitializeDatabaseWithRetry initializes the database with retry logic and exponential backoff.
 func InitializeDatabaseWithRetry(
-	ctx context.Context, databaseURL string, logger *slog.Logger, maxRetries int, baseDelay time.Duration,
+	ctx context.Context, dbConfig configapp.DatabaseConfig, logger *slog.Logger, maxRetries int, baseDelay time.Duration,
 ) (*sql.DB, error) {
 	var lastErr error
 
@@ -55,7 +57,7 @@ func InitializeDatabaseWithRetry(
 			}
 		}
 
-		db, err := initializeDatabaseAttempt(ctx, databaseURL, logger)
+		db, err := initializeDatabaseAttempt(ctx, dbConfig, logger)
 		if err == nil {
 			if attempt > 0 {
 				logger.Info("Database initialization succeeded after retries", slog.Int("attempts", attempt+1))
@@ -74,9 +76,11 @@ func InitializeDatabaseWithRetry(
 }
 
 // initializeDatabaseAttempt performs a single database initialization attempt.
-func initializeDatabaseAttempt(ctx context.Context, databaseURL string, logger *slog.Logger) (*sql.DB, error) {
+func initializeDatabaseAttempt(
+	ctx context.Context, dbConfig configapp.DatabaseConfig, logger *slog.Logger,
+) (*sql.DB, error) {
 	// Parse and validate database URL
-	parsedURL, err := url.Parse(databaseURL)
+	parsedURL, err := url.Parse(dbConfig.URL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid database URL: %w", err)
 	}
@@ -92,7 +96,7 @@ func initializeDatabaseAttempt(ctx context.Context, databaseURL string, logger *
 	logger.Debug("Database migrations completed successfully")
 
 	// Open and test database connection
-	return openAndTestConnection(ctx, databaseURL, logger)
+	return openAndTestConnection(ctx, dbConfig, logger)
 }
 
 // setupAndRunMigrations configures dbmate and runs migrations.
@@ -143,11 +147,36 @@ func logMigrations(logger *slog.Logger) error {
 }
 
 // openAndTestConnection opens a database connection and tests it.
-func openAndTestConnection(ctx context.Context, databaseURL string, logger *slog.Logger) (*sql.DB, error) {
-	sqlDB, err := sql.Open("postgres", databaseURL)
+func openAndTestConnection(
+	ctx context.Context, dbConfig configapp.DatabaseConfig, logger *slog.Logger,
+) (*sql.DB, error) {
+	sqlDB, err := sql.Open("postgres", dbConfig.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
+
+	// Configure connection pool
+	sqlDB.SetMaxOpenConns(dbConfig.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(dbConfig.MaxIdleConns)
+
+	// Parse and set lifetime durations
+	maxLifetime, err := time.ParseDuration(dbConfig.ConnMaxLifetime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse conn_max_lifetime: %w", err)
+	}
+	sqlDB.SetConnMaxLifetime(maxLifetime)
+
+	maxIdleTime, err := time.ParseDuration(dbConfig.ConnMaxIdleTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse conn_max_idle_time: %w", err)
+	}
+	sqlDB.SetConnMaxIdleTime(maxIdleTime)
+
+	logger.Info("Database connection pool configured",
+		slog.Int("max_open_conns", dbConfig.MaxOpenConns),
+		slog.Int("max_idle_conns", dbConfig.MaxIdleConns),
+		slog.String("conn_max_lifetime", dbConfig.ConnMaxLifetime),
+		slog.String("conn_max_idle_time", dbConfig.ConnMaxIdleTime))
 
 	// Test the connection
 	err = sqlDB.PingContext(ctx)

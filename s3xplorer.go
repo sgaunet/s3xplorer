@@ -121,7 +121,7 @@ func initInfrastructure(ctx context.Context, cfg configapp.Config, l *slog.Logge
 		return nil, nil, fmt.Errorf("error initializing S3 client: %w", err)
 	}
 
-	dbConn, err := dbinit.InitializeDatabase(ctx, cfg.Database.URL, l)
+	dbConn, err := dbinit.InitializeDatabase(ctx, cfg.Database, l)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error initializing database: %w", err)
 	}
