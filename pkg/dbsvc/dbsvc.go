@@ -114,11 +114,13 @@ func (s *Service) GetFolders(
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
+	// Note: offset parameter is deprecated with keyset pagination
+	// Always fetches from beginning (nil cursors) for simplicity
 	objects, err := s.queries.ListS3Folders(ctx, database.ListS3FoldersParams{
-		BucketID: bucket.ID,
-		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),
-		Offset:   int32(min(int64(offset), math.MaxInt32)),
+		BucketID:  bucket.ID,
+		Column2:   prefix,
+		Limit:     int32(min(int64(limit), math.MaxInt32)),
+		CursorKey: sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list folders: %w", err)
@@ -136,11 +138,14 @@ func (s *Service) GetObjects(
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
+	// Note: offset parameter is deprecated with keyset pagination
+	// Always fetches from beginning (nil cursors) for simplicity
 	objects, err := s.queries.ListS3Objects(ctx, database.ListS3ObjectsParams{
-		BucketID: bucket.ID,
-		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),
-		Offset:   int32(min(int64(offset), math.MaxInt32)),
+		BucketID:       bucket.ID,
+		Column2:        prefix,
+		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
+		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects: %w", err)
@@ -158,11 +163,14 @@ func (s *Service) SearchObjects(
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
+	// Note: offset parameter is deprecated with keyset pagination
+	// Always fetches from beginning (nil cursors) for simplicity
 	objects, err := s.queries.SearchS3Objects(ctx, database.SearchS3ObjectsParams{
-		BucketID: bucket.ID,
-		Column2:  sql.NullString{String: query, Valid: true},
-		Limit:    int32(min(int64(limit), math.MaxInt32)),
-		Offset:   int32(min(int64(offset), math.MaxInt32)),
+		BucketID:       bucket.ID,
+		Column2:        sql.NullString{String: query, Valid: true},
+		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
+		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to search objects: %w", err)
@@ -180,11 +188,14 @@ func (s *Service) GetObjectsByPrefix(
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
+	// Note: offset parameter is deprecated with keyset pagination
+	// Always fetches from beginning (nil cursors) for simplicity
 	objects, err := s.queries.ListS3ObjectsByPrefix(ctx, database.ListS3ObjectsByPrefixParams{
-		BucketID: bucket.ID,
-		Column2:  sql.NullString{String: prefix, Valid: true},
-		Limit:    int32(min(int64(limit), math.MaxInt32)),
-		Offset:   int32(min(int64(offset), math.MaxInt32)),
+		BucketID:       bucket.ID,
+		Column2:        sql.NullString{String: prefix, Valid: true},
+		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
+		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects by prefix: %w", err)
@@ -220,11 +231,14 @@ func (s *Service) GetDirectChildren(
 		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
+	// Note: offset parameter is deprecated with keyset pagination
+	// Always fetches from beginning (nil cursors) for simplicity
 	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
-		BucketID: bucket.ID,
-		Column2:  prefix,
-		Limit:    int32(min(int64(limit), math.MaxInt32)),
-		Offset:   int32(min(int64(offset), math.MaxInt32)),
+		BucketID:       bucket.ID,
+		Column2:        prefix,
+		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
+		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get direct children: %w", err)
@@ -280,43 +294,46 @@ func (s *Service) GetDirectChildrenPaginated(
 		return nil, nil, 0, 0, fmt.Errorf("bucket not found: %w", err)
 	}
 
-	// Get total counts
+	// Get total counts (kept for UI display as per user requirement)
 	totalFolders, totalFiles, err = s.CountDirectChildren(ctx, bucketName, prefix)
 	if err != nil {
 		return nil, nil, 0, 0, fmt.Errorf("failed to count children: %w", err)
 	}
 
-	// Calculate offsets using pagination logic
-	folderLimit, folderOffset, fileLimit, fileOffset := CalculateFolderFileOffsets(
-		page, pageSize, totalFolders, totalFiles,
-	)
-
-	// Fetch folders if needed
-	if folderLimit > 0 {
-		dbFolders, err := s.queries.ListS3Folders(ctx, database.ListS3FoldersParams{
-			BucketID: bucket.ID,
-			Column2:  prefix,
-			Limit:    int32(min(int64(folderLimit), math.MaxInt32)),
-			Offset:   int32(min(int64(folderOffset), math.MaxInt32)),
-		})
-		if err != nil {
-			return nil, nil, 0, 0, fmt.Errorf("failed to list folders: %w", err)
-		}
-		folders = s.convertToDTO(dbFolders)
+	// Get cursor for keyset pagination (nil for page 1)
+	cursor, err := s.GetCursorForPage(ctx, int64(bucket.ID), prefix, page, pageSize)
+	if err != nil {
+		return nil, nil, 0, 0, fmt.Errorf("failed to get cursor: %w", err)
 	}
 
-	// Fetch files if needed
-	if fileLimit > 0 {
-		dbFiles, err := s.queries.ListS3Files(ctx, database.ListS3FilesParams{
-			BucketID: bucket.ID,
-			Column2:  prefix,
-			Limit:    int32(min(int64(fileLimit), math.MaxInt32)),
-			Offset:   int32(min(int64(fileOffset), math.MaxInt32)),
-		})
-		if err != nil {
-			return nil, nil, 0, 0, fmt.Errorf("failed to list files: %w", err)
+	// Prepare nullable cursor parameters for sqlc
+	var cursorIsFolder sql.NullBool
+	var cursorKey sql.NullString
+	if cursor != nil {
+		cursorIsFolder = sql.NullBool{Bool: cursor.IsFolder, Valid: true}
+		cursorKey = sql.NullString{String: cursor.Key, Valid: true}
+	}
+
+	// Fetch page using keyset query (single query replaces dual folder/file queries)
+	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
+		BucketID:        bucket.ID,
+		Column2:         prefix,
+		Limit:           int32(min(int64(pageSize), math.MaxInt32)),
+		CursorIsFolder:  cursorIsFolder,
+		CursorKey:       cursorKey,
+	})
+	if err != nil {
+		return nil, nil, 0, 0, fmt.Errorf("failed to list objects: %w", err)
+	}
+
+	// Convert to DTOs and separate folders from files for backward compatibility
+	allObjects := s.convertToDTO(objects)
+	for _, obj := range allObjects {
+		if obj.IsFolder {
+			folders = append(folders, obj)
+		} else {
+			files = append(files, obj)
 		}
-		files = s.convertToDTO(dbFiles)
 	}
 
 	return folders, files, totalFolders, totalFiles, nil
