@@ -6,3 +6,5 @@ postgres_data
 *vault*
 *_templ.go
 /pkg/database
+/bin/
+/.taskmaster
