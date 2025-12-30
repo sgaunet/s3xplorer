@@ -24,17 +24,19 @@ func TestEmbeddedMigrations(t *testing.T) {
 		}
 	}
 
-	// We should have exactly 6 migration files
-	assert.Equal(t, 6, sqlFiles, "Should have exactly 6 SQL migration files embedded")
+	// We should have exactly 8 migration files
+	assert.Equal(t, 8, sqlFiles, "Should have exactly 8 SQL migration files embedded")
 
 	// Check for specific expected migrations
 	expectedMigrations := []string{
 		"20250629000001_create_s3_objects.sql",
-		"20250702000001_add_marked_for_deletion.sql", 
+		"20250702000001_add_marked_for_deletion.sql",
 		"20250702000002_add_deletion_tracking_to_scan_jobs.sql",
 		"20250703000001_add_bucket_lifecycle_columns.sql",
 		"20250703000002_add_bucket_sync_stats_to_scan_jobs.sql",
 		"20250703000003_allow_global_scan_jobs.sql",
+		"20250704000001_add_composite_indexes.sql",
+		"20251230000001_add_keyset_pagination_index.sql",
 	}
 
 	for _, expected := range expectedMigrations {
