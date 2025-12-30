@@ -2,31 +2,76 @@
 SELECT * FROM s3_objects
 WHERE bucket_id = $1 AND key = $2;
 
--- name: ListS3Objects :many
-SELECT * FROM s3_objects
-WHERE bucket_id = $1 
+-- name: GetCursorForListS3Objects :one
+-- Get cursor position for keyset pagination
+SELECT is_folder, key FROM s3_objects
+WHERE bucket_id = $1
   AND ($2 = '' OR prefix = $2)
 ORDER BY is_folder DESC, key ASC
-LIMIT $3 OFFSET $4;
+LIMIT 1 OFFSET $3;
+
+-- name: ListS3Objects :many
+SELECT * FROM s3_objects
+WHERE bucket_id = $1
+  AND ($2 = '' OR prefix = $2)
+  AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
+       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+ORDER BY is_folder DESC, key ASC
+LIMIT $3;
+
+-- name: GetCursorForListS3ObjectsByPrefix :one
+-- Get cursor position for keyset pagination with prefix search
+SELECT is_folder, key FROM s3_objects
+WHERE bucket_id = $1
+  AND prefix LIKE $2 || '%'
+ORDER BY is_folder DESC, key ASC
+LIMIT 1 OFFSET $3;
 
 -- name: ListS3ObjectsByPrefix :many
 SELECT * FROM s3_objects
-WHERE bucket_id = $1 
+WHERE bucket_id = $1
   AND prefix LIKE $2 || '%'
+  AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
+       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
-LIMIT $3 OFFSET $4;
+LIMIT $3;
+
+-- name: GetCursorForSearchS3Objects :one
+-- Get cursor position for keyset pagination in search results
+SELECT is_folder, key FROM s3_objects
+WHERE bucket_id = $1
+  AND key ILIKE '%' || $2 || '%'
+ORDER BY is_folder DESC, key ASC
+LIMIT 1 OFFSET $3;
 
 -- name: SearchS3Objects :many
 SELECT * FROM s3_objects
-WHERE bucket_id = $1 
+WHERE bucket_id = $1
   AND key ILIKE '%' || $2 || '%'
+  AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
+       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
-LIMIT $3 OFFSET $4;
+LIMIT $3;
 
 -- name: CountS3Objects :one
 SELECT COUNT(*) FROM s3_objects
 WHERE bucket_id = $1 
   AND ($2 = '' OR prefix = $2);
+
+-- name: GetCursorForListS3Folders :one
+-- Get cursor position for keyset pagination of folders only
+SELECT key FROM s3_objects
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND is_folder = true
+ORDER BY key ASC
+LIMIT 1 OFFSET $3;
 
 -- name: ListS3Folders :many
 SELECT * FROM s3_objects
@@ -39,8 +84,24 @@ WHERE bucket_id = $1
     ($2 != '' AND prefix = $2)
   )
   AND is_folder = true
+  AND (sqlc.narg('cursor_key')::text IS NULL OR key > sqlc.narg('cursor_key'))
 ORDER BY key ASC
-LIMIT $3 OFFSET $4;
+LIMIT $3;
+
+-- name: GetCursorForListS3Files :one
+-- Get cursor position for keyset pagination of files only
+SELECT key FROM s3_objects
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND is_folder = false
+ORDER BY key ASC
+LIMIT 1 OFFSET $3;
 
 -- name: ListS3Files :many
 SELECT * FROM s3_objects
@@ -53,8 +114,9 @@ WHERE bucket_id = $1
     ($2 != '' AND prefix = $2)
   )
   AND is_folder = false
+  AND (sqlc.narg('cursor_key')::text IS NULL OR key > sqlc.narg('cursor_key'))
 ORDER BY key ASC
-LIMIT $3 OFFSET $4;
+LIMIT $3;
 
 -- name: CreateS3Object :one
 INSERT INTO s3_objects (bucket_id, key, size, last_modified, etag, storage_class, is_folder, prefix)
@@ -88,19 +150,10 @@ WHERE bucket_id = $1 AND key = $2;
 DELETE FROM s3_objects
 WHERE bucket_id = $1;
 
--- name: GetFolderContents :many
-SELECT * FROM s3_objects
-WHERE bucket_id = $1 
-  AND prefix = $2
-  AND key != $2
-ORDER BY is_folder DESC, key ASC
-LIMIT $3 OFFSET $4;
-
--- name: GetDirectChildren :many
--- Get only immediate children (files and folders) under a specific prefix
--- For hierarchical navigation - not recursive
-SELECT * FROM s3_objects
-WHERE bucket_id = $1 
+-- name: GetCursorForDirectChildren :one
+-- Get cursor position for keyset pagination of direct children
+SELECT is_folder, key FROM s3_objects
+WHERE bucket_id = $1
   AND (
     -- Handle root level (empty prefix): objects with empty or null prefix
     ($2 = '' AND (prefix = '' OR prefix IS NULL))
@@ -112,12 +165,37 @@ WHERE bucket_id = $1
   AND (
     -- Direct files: files whose prefix exactly matches the given prefix
     (is_folder = false)
-    OR 
+    OR
     -- Direct folders: folders whose prefix exactly matches the given prefix
     (is_folder = true)
   )
 ORDER BY is_folder DESC, key ASC
-LIMIT $3 OFFSET $4;
+LIMIT 1 OFFSET $3;
+
+-- name: GetDirectChildren :many
+-- Get only immediate children (files and folders) under a specific prefix
+-- For hierarchical navigation - not recursive
+SELECT * FROM s3_objects
+WHERE bucket_id = $1
+  AND (
+    -- Handle root level (empty prefix): objects with empty or null prefix
+    ($2 = '' AND (prefix = '' OR prefix IS NULL))
+    OR
+    -- Handle non-empty prefix: exact prefix match
+    ($2 != '' AND prefix = $2)
+  )
+  AND key != $2
+  AND (
+    -- Direct files: files whose prefix exactly matches the given prefix
+    (is_folder = false)
+    OR
+    -- Direct folders: folders whose prefix exactly matches the given prefix
+    (is_folder = true)
+  )
+  AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
+       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+ORDER BY is_folder DESC, key ASC
+LIMIT $3;
 
 -- name: GetParentFolder :one
 -- Get parent folder information for breadcrumb navigation
