@@ -18,6 +18,10 @@ s3:
   enable_glacier_restore: true
   # Skip bucket validation (HeadBucket operation)
   skip_bucket_validation: false
+  # Whether to enable file upload functionality (default: false if not specified)
+  enable_upload: true
+  # Whether to enable file deletion functionality (default: false if not specified)
+  enable_delete: true
 
 # Database Configuration
 database:

@@ -18,6 +18,10 @@ s3:
   # Set to true if your IAM user doesn't have s3:HeadBucket permission
   # Note: validation is automatically skipped when a single bucket is configured
   skip_bucket_validation: false
+  # Whether to enable file upload functionality (default: false if not specified)
+  enable_upload: false
+  # Whether to enable file deletion functionality (default: false if not specified)
+  enable_delete: false
 
 # Database Configuration
 database:

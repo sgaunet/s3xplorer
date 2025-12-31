@@ -25,6 +25,8 @@ type S3Config struct {
 	RestoreDays      int    `yaml:"restore_days"`
 	EnableGlacierRestore bool `yaml:"enable_glacier_restore"`
 	SkipBucketValidation bool `yaml:"skip_bucket_validation"`
+	EnableUpload     bool `yaml:"enable_upload"`
+	EnableDelete     bool `yaml:"enable_delete"`
 	// Not serialized, but used to track whether bucket was explicitly set in config
 	BucketLocked     bool   `yaml:"-"`
 }

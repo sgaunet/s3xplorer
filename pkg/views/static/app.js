@@ -106,3 +106,60 @@ document.addEventListener('keydown', (e) => {
     if (lastLink) lastLink.focus();
   }
 });
+
+// Toggle all file checkboxes
+function toggleAllCheckboxes(checked) {
+  const checkboxes = document.querySelectorAll('.file-checkbox');
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = checked;
+  });
+  updateDeleteButton();
+}
+
+// Update delete button state based on checkbox selection
+function updateDeleteButton() {
+  const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+  const deleteButton = document.getElementById('delete-button');
+  const deleteCount = document.getElementById('delete-count');
+
+  if (!deleteButton || !deleteCount) return;
+
+  const count = checkboxes.length;
+  deleteCount.textContent = count;
+  deleteButton.disabled = count === 0;
+
+  // Update select-all checkbox state
+  const selectAll = document.getElementById('select-all');
+  if (selectAll) {
+    const allCheckboxes = document.querySelectorAll('.file-checkbox');
+    selectAll.checked = allCheckboxes.length > 0 && count === allCheckboxes.length;
+    selectAll.indeterminate = count > 0 && count < allCheckboxes.length;
+  }
+}
+
+// Submit delete form with selected file keys
+function submitDeleteForm() {
+  const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+  if (checkboxes.length === 0) return;
+
+  // Confirm deletion
+  const fileText = checkboxes.length === 1 ? 'this file' : `these ${checkboxes.length} files`;
+  if (!confirm(`Are you sure you want to delete ${fileText}?`)) {
+    return;
+  }
+
+  // Build form with keys
+  const form = document.getElementById('delete-form');
+  const container = document.getElementById('delete-keys-container');
+  container.innerHTML = ''; // Clear previous
+
+  checkboxes.forEach(checkbox => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'keys';
+    input.value = checkbox.dataset.key;
+    container.appendChild(input);
+  });
+
+  form.submit();
+}

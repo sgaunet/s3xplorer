@@ -59,12 +59,57 @@ templ RenderIndexHierarchical(Folders []dto.S3Object, Files []dto.S3Object, Actu
               <span>file(s) on this page</span>
             </div>
           </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">
-            <span>Page <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.CurrentPage) }</strong> of <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.TotalPages) }</strong></span>
-            <span class="mx-2">•</span>
-            <span>Total: <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.TotalItems) }</strong> items</span>
+          <div class="flex items-center gap-3">
+            if cfg.S3.EnableUpload {
+              <button onclick="document.getElementById('upload-form').classList.toggle('hidden')" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md transition-colors" aria-label="Upload file">
+                @Icon("upload", "w-5 h-5")
+                <span>Upload</span>
+              </button>
+            }
+            if cfg.S3.EnableDelete && len(Files) > 0 {
+              <button id="delete-button" onclick="submitDeleteForm()" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled aria-label="Delete selected files">
+                @Icon("trash", "w-5 h-5")
+                <span>Delete Selected (<span id="delete-count">0</span>)</span>
+              </button>
+            }
+            <div class="text-sm text-gray-600 dark:text-gray-400">
+              <span>Page <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.CurrentPage) }</strong> of <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.TotalPages) }</strong></span>
+              <span class="mx-2">•</span>
+              <span>Total: <strong class="text-gray-900 dark:text-white">{ fmt.Sprintf("%d", Paging.TotalItems) }</strong> items</span>
+            </div>
           </div>
         </div>
+
+        <!-- Upload form (hidden by default) -->
+        if cfg.S3.EnableUpload {
+          <div id="upload-form" class="hidden mb-6 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700">
+            <form action="/upload" method="POST" enctype="multipart/form-data" class="flex items-center gap-4">
+              <input type="hidden" name="folder" value={ ActualFolder } />
+              <div class="flex-1">
+                <label for="file-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Select file to upload
+                </label>
+                <input type="file" id="file-input" name="file" required class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer bg-white dark:bg-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div class="flex gap-2">
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md transition-colors">
+                  Upload
+                </button>
+                <button type="button" onclick="document.getElementById('upload-form').classList.add('hidden')" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-md transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        }
+
+        <!-- Delete form (hidden, submitted by JavaScript) -->
+        if cfg.S3.EnableDelete {
+          <form id="delete-form" action="/delete" method="POST" style="display:none;">
+            <input type="hidden" name="folder" value={ ActualFolder } />
+            <div id="delete-keys-container"></div>
+          </form>
+        }
       </div>
 
       <div class="max-w-7xl mx-auto px-6">
@@ -78,6 +123,11 @@ templ RenderIndexHierarchical(Folders []dto.S3Object, Files []dto.S3Object, Actu
             <table role="grid" class="w-full border-collapse" aria-label="Files and folders">
               <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                 <tr role="row">
+                  if cfg.S3.EnableDelete {
+                    <th class="w-12 px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">
+                      <input type="checkbox" id="select-all" onchange="toggleAllCheckboxes(this.checked)" class="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-blue-600 focus:ring-blue-500" aria-label="Select all files" />
+                    </th>
+                  }
                   <th class="w-12 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Type</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Name</th>
                   <th class="w-32 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Size</th>
@@ -91,6 +141,11 @@ templ RenderIndexHierarchical(Folders []dto.S3Object, Files []dto.S3Object, Actu
                 <!-- Show Folders First -->
                 for _ , obj := range Folders {
                   <tr role="row" class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                    if cfg.S3.EnableDelete {
+                      <td class="px-4 py-4 text-center" role="gridcell">
+                        <!-- No checkbox for folders -->
+                      </td>
+                    }
                     <td class="px-4 py-4 text-center" role="gridcell">
                       @Icon("folder", "w-6 h-6 text-blue-500 dark:text-blue-400")
                     </td>
@@ -109,6 +164,11 @@ templ RenderIndexHierarchical(Folders []dto.S3Object, Files []dto.S3Object, Actu
                 <!-- Then Show Files -->
                 for _,obj := range Files {
                   <tr role="row" class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                    if cfg.S3.EnableDelete {
+                      <td class="px-4 py-4 text-center" role="gridcell">
+                        <input type="checkbox" class="file-checkbox w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-blue-600 focus:ring-blue-500" data-key={ obj.Key } onchange="updateDeleteButton()" aria-label={ fmt.Sprintf("Select %s", obj.Name) } />
+                      </td>
+                    }
                     <td class="px-4 py-4 text-center" role="gridcell">
                       @Icon(getFileIconName(obj.Name), "w-6 h-6 text-gray-500 dark:text-gray-400")
                     </td>
