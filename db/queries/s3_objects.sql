@@ -15,7 +15,7 @@ SELECT * FROM s3_objects
 WHERE bucket_id = $1
   AND ($2 = '' OR prefix = $2)
   AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
-       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+       OR (is_folder, key) > (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
 LIMIT $3;
 
@@ -32,7 +32,7 @@ SELECT * FROM s3_objects
 WHERE bucket_id = $1
   AND prefix LIKE $2 || '%'
   AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
-       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+       OR (is_folder, key) > (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
 LIMIT $3;
 
@@ -49,7 +49,7 @@ SELECT * FROM s3_objects
 WHERE bucket_id = $1
   AND key ILIKE '%' || $2 || '%'
   AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
-       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+       OR (is_folder, key) > (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
 LIMIT $3;
 
@@ -193,7 +193,7 @@ WHERE bucket_id = $1
     (is_folder = true)
   )
   AND (sqlc.narg('cursor_is_folder')::boolean IS NULL
-       OR (is_folder, key) < (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
+       OR (is_folder, key) > (sqlc.narg('cursor_is_folder')::boolean, sqlc.narg('cursor_key')::text))
 ORDER BY is_folder DESC, key ASC
 LIMIT $3;
 
