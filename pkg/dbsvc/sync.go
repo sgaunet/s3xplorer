@@ -3,11 +3,17 @@ package dbsvc
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/sgaunet/s3xplorer/pkg/database"
+)
+
+var (
+	// ErrPartialDeletionSync indicates that not all deletions were synced to the database.
+	ErrPartialDeletionSync = errors.New("partial deletion sync failure")
 )
 
 // SyncUploadedObject creates or updates an S3 object record in the database after upload.
@@ -106,7 +112,7 @@ func (s *Service) SyncDeletedObjects(ctx context.Context, bucketName string, key
 	}
 
 	if successCount != len(keys) {
-		return fmt.Errorf("synced %d of %d deleted objects", successCount, len(keys))
+		return fmt.Errorf("%w: synced %d of %d deleted objects", ErrPartialDeletionSync, successCount, len(keys))
 	}
 
 	s.log.Debug("Synced deleted objects to database",
