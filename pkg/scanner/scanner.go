@@ -142,7 +142,7 @@ func (s *Service) ScanBucket(ctx context.Context, bucketName string) error {
 	// Final progress update
 	_, err = s.queries.UpdateScanJobProgress(ctx, database.UpdateScanJobProgressParams{
 		ID:             scanJob.ID,
-		ObjectsScanned: sql.NullInt32{Int32: int32(min(objectCount, math.MaxInt32)), Valid: true},
+		ObjectsScanned: sql.NullInt32{Int32: safeInt32(objectCount), Valid: true},
 	})
 	if err != nil {
 		s.log.Error("Failed to update final scan job progress", slog.String("error", err.Error()))
@@ -775,10 +775,10 @@ func (s *Service) finalizeScanJob(
 		// Update final statistics including bucket sync stats (default to 0 for individual bucket scans)
 		_, updateErr := s.queries.UpdateScanJobFullStats(ctx, database.UpdateScanJobFullStatsParams{
 			ID:                        scanJobID,
-			ObjectsScanned:            sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true},
-			ObjectsCreated:            sql.NullInt32{Int32: int32(*objectsCreated), Valid: true},
-			ObjectsUpdated:            sql.NullInt32{Int32: int32(*objectsUpdated), Valid: true},
-			ObjectsDeleted:            sql.NullInt32{Int32: int32(*objectsDeleted), Valid: true},
+			ObjectsScanned:            sql.NullInt32{Int32: safeInt32(*objectCount), Valid: true},
+			ObjectsCreated:            sql.NullInt32{Int32: safeInt32(*objectsCreated), Valid: true},
+			ObjectsUpdated:            sql.NullInt32{Int32: safeInt32(*objectsUpdated), Valid: true},
+			ObjectsDeleted:            sql.NullInt32{Int32: safeInt32(*objectsDeleted), Valid: true},
 			BucketsValidated:          sql.NullInt32{Int32: 0, Valid: true}, // Individual bucket scans don't validate buckets
 			BucketsMarkedInaccessible: sql.NullInt32{Int32: 0, Valid: true},
 			BucketsCleanedUp:          sql.NullInt32{Int32: 0, Valid: true},
@@ -876,7 +876,7 @@ func (s *Service) processPageObjects(
 		if *objectCount%100 == 0 {
 			_, err := s.queries.UpdateScanJobProgress(ctx, database.UpdateScanJobProgressParams{
 				ID:             scanJobID,
-				ObjectsScanned: sql.NullInt32{Int32: int32(min(*objectCount, math.MaxInt32)), Valid: true},
+				ObjectsScanned: sql.NullInt32{Int32: safeInt32(*objectCount), Valid: true},
 			})
 			if err != nil {
 				s.log.Error("Failed to update scan job progress", slog.String("error", err.Error()))
@@ -1015,4 +1015,13 @@ func (s *Service) performPhase3BucketCleanup(ctx context.Context) int {
 	}
 
 	return 0
+}
+
+// safeInt32 converts an int to int32, clamping to math.MaxInt32 on overflow.
+func safeInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+
+	return int32(v) //nolint:gosec // Overflow checked above
 }

@@ -54,6 +54,9 @@ func (s *App) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 // processUpload handles the actual upload processing logic.
 func (s *App) processUpload(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// Limit request body size to prevent memory exhaustion
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize+1<<20)
+
 	// Parse multipart form
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		s.log.Error("Failed to parse multipart form", slog.String("error", err.Error()))
