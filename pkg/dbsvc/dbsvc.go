@@ -119,7 +119,7 @@ func (s *Service) GetFolders(
 	objects, err := s.queries.ListS3Folders(ctx, database.ListS3FoldersParams{
 		BucketID:  bucket.ID,
 		Column2:   prefix,
-		Limit:     int32(min(int64(limit), math.MaxInt32)),
+		Limit:     safeInt32(limit),
 		CursorKey: sql.NullString{}, // nil cursor = start from beginning
 	})
 	if err != nil {
@@ -143,7 +143,7 @@ func (s *Service) GetObjects(
 	objects, err := s.queries.ListS3Objects(ctx, database.ListS3ObjectsParams{
 		BucketID:       bucket.ID,
 		Column2:        prefix,
-		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		Limit:          safeInt32(limit),
 		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
 		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
@@ -168,7 +168,7 @@ func (s *Service) SearchObjects(
 	objects, err := s.queries.SearchS3Objects(ctx, database.SearchS3ObjectsParams{
 		BucketID:       bucket.ID,
 		Column2:        sql.NullString{String: query, Valid: true},
-		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		Limit:          safeInt32(limit),
 		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
 		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
@@ -193,7 +193,7 @@ func (s *Service) GetObjectsByPrefix(
 	objects, err := s.queries.ListS3ObjectsByPrefix(ctx, database.ListS3ObjectsByPrefixParams{
 		BucketID:       bucket.ID,
 		Column2:        sql.NullString{String: prefix, Valid: true},
-		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		Limit:          safeInt32(limit),
 		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
 		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
@@ -236,7 +236,7 @@ func (s *Service) GetDirectChildren(
 	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
 		BucketID:       bucket.ID,
 		Column2:        prefix,
-		Limit:          int32(min(int64(limit), math.MaxInt32)),
+		Limit:          safeInt32(limit),
 		CursorIsFolder: sql.NullBool{},   // nil cursor = start from beginning
 		CursorKey:      sql.NullString{}, // nil cursor = start from beginning
 	})
@@ -318,7 +318,7 @@ func (s *Service) GetDirectChildrenPaginated(
 	objects, err := s.queries.GetDirectChildren(ctx, database.GetDirectChildrenParams{
 		BucketID:        bucket.ID,
 		Column2:         prefix,
-		Limit:           int32(min(int64(pageSize), math.MaxInt32)),
+		Limit:           safeInt32(pageSize),
 		CursorIsFolder:  cursorIsFolder,
 		CursorKey:       cursorKey,
 	})
@@ -531,4 +531,13 @@ func (s *Service) extractFileName(key string) string {
 		return key[idx+1:]
 	}
 	return key
+}
+
+// safeInt32 converts an int to int32, clamping to math.MaxInt32 on overflow.
+func safeInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+
+	return int32(v) //nolint:gosec // Overflow checked above
 }

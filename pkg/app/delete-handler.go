@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+const (
+	// MaxDeleteFormSize is the maximum size allowed for delete form data (1 MB).
+	MaxDeleteFormSize = 1 << 20
+)
+
 var (
 	// ErrParseDeleteRequest indicates failure to parse the delete form.
 	ErrParseDeleteRequest = errors.New("failed to parse request")
@@ -44,6 +49,9 @@ func (s *App) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 // processDelete handles the actual deletion processing logic.
 func (s *App) processDelete(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// Limit request body size to prevent memory exhaustion
+	r.Body = http.MaxBytesReader(w, r.Body, MaxDeleteFormSize)
+
 	// Parse form data
 	if err := r.ParseForm(); err != nil {
 		s.log.Error("Failed to parse form", slog.String("error", err.Error()))

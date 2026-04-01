@@ -33,9 +33,9 @@ func (s *Service) GetCursorForPage(
 
 	// Get cursor at offset position (last item of previous page)
 	cursor, err := s.queries.GetCursorForDirectChildren(ctx, database.GetCursorForDirectChildrenParams{
-		BucketID: int32(bucketID),
+		BucketID: safeInt32(int(bucketID)),
 		Column2:  prefix,
-		Offset:   int32(offset - 1), // Get the last item of previous page
+		Offset:   safeInt32(int(offset - 1)), // Get the last item of previous page
 	})
 
 	if err != nil {
@@ -67,9 +67,9 @@ func (s *Service) GetCursorForFolders(
 	offset := int64((page - 1) * pageSize)
 
 	cursorKey, err := s.queries.GetCursorForListS3Folders(ctx, database.GetCursorForListS3FoldersParams{
-		BucketID: int32(bucketID),
+		BucketID: safeInt32(int(bucketID)),
 		Column2:  prefix,
-		Offset:   int32(offset - 1),
+		Offset:   safeInt32(int(offset - 1)),
 	})
 
 	if err != nil {
@@ -97,9 +97,9 @@ func (s *Service) GetCursorForFiles(
 	offset := int64((page - 1) * pageSize)
 
 	cursorKey, err := s.queries.GetCursorForListS3Files(ctx, database.GetCursorForListS3FilesParams{
-		BucketID: int32(bucketID),
+		BucketID: safeInt32(int(bucketID)),
 		Column2:  prefix,
-		Offset:   int32(offset - 1),
+		Offset:   safeInt32(int(offset - 1)),
 	})
 
 	if err != nil {
