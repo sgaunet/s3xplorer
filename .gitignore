@@ -8,3 +8,4 @@ postgres_data
 /pkg/database
 /bin/
 /.taskmaster
+/.claude
