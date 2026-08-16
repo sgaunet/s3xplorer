@@ -2,10 +2,7 @@
 version: '3'
 vars:
   BINFILE: s3xplorer
-  TAILWIND_VERSION: v3.4.17
-  TAILWIND_OS: '{{if eq OS "darwin"}}macos{{else if eq OS "windows"}}windows{{else}}linux{{end}}'
-  TAILWIND_ARCH: '{{if eq ARCH "amd64"}}x64{{else}}arm64{{end}}'
-  TAILWIND_EXT: '{{if eq OS "windows"}}.exe{{else}}{{end}}'
+  BULMA_VERSION: 1.0.4
 
 tasks:
   default:
@@ -13,42 +10,31 @@ tasks:
     cmds:
       - task -a
 
-  tailwind:download:
-    desc: "Download Tailwind CSS standalone binary"
+  css:vendor:
+    desc: "Re-vendor the Bulma stylesheet (committed; only needed to upgrade)"
     silent: true
     cmds:
-      - mkdir -p bin
-      - curl -sL -o bin/tailwindcss{{.TAILWIND_EXT}} https://github.com/tailwindlabs/tailwindcss/releases/download/{{.TAILWIND_VERSION}}/tailwindcss-{{.TAILWIND_OS}}-{{.TAILWIND_ARCH}}{{.TAILWIND_EXT}}
-      - chmod +x bin/tailwindcss{{.TAILWIND_EXT}}
-    status:
-      - test -f bin/tailwindcss{{.TAILWIND_EXT}}
+      - curl -sSfL -o pkg/views/static/bulma.min.css https://cdn.jsdelivr.net/npm/bulma@{{.BULMA_VERSION}}/css/bulma.min.css
+      - task: css:compress
+      - shasum -a 256 pkg/views/static/bulma.min.css
 
-  css:build:
-    desc: "Build Tailwind CSS"
-    deps:
-      - tailwind:download
+  css:compress:
+    desc: "Regenerate the pre-compressed .gz siblings served to gzip clients"
+    silent: true
     sources:
-      - pkg/views/**/*.templ
-      - pkg/views/static/src/input.css
+      - pkg/views/static/bulma.min.css
+      - pkg/views/static/theme.css
     generates:
-      - pkg/views/static/app.css
+      - pkg/views/static/bulma.min.css.gz
+      - pkg/views/static/theme.css.gz
     cmds:
-      - ./bin/tailwindcss{{.TAILWIND_EXT}} -i pkg/views/static/src/input.css -o pkg/views/static/app.css --minify
-
-  css:watch:
-    desc: "Watch and rebuild Tailwind CSS"
-    deps:
-      - tailwind:download
-    sources:
-      - pkg/views/**/*.templ
-      - pkg/views/static/src/input.css
-    cmds:
-      - ./bin/tailwindcss{{.TAILWIND_EXT}} -i pkg/views/static/src/input.css -o pkg/views/static/app.css --watch
+      - gzip -9 -k -f -n pkg/views/static/bulma.min.css
+      - gzip -9 -k -f -n pkg/views/static/theme.css
 
   build:
     desc: "Build the binary"
     deps:
-      - css:build
+      - css:compress
     cmds:
       - go mod download
       - go generate ./...

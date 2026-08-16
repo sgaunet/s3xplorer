@@ -1,6 +1,9 @@
 package views
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,10 +20,17 @@ func TestStaticHandler(t *testing.T) {
 		contentType     string
 	}{
 		{
-			name:            "Serve app.css",
-			path:            "/static/app.css",
+			name:            "Serve bulma.min.css",
+			path:            "/static/bulma.min.css",
 			expectedStatus:  http.StatusOK,
-			contentContains: "tailwindcss",
+			contentContains: "--bulma-scheme-main",
+			contentType:     "text/css",
+		},
+		{
+			name:            "Serve theme.css",
+			path:            "/static/theme.css",
+			expectedStatus:  http.StatusOK,
+			contentContains: ".skip-link",
 			contentType:     "text/css",
 		},
 		{
@@ -94,7 +104,7 @@ func TestStaticHandler(t *testing.T) {
 
 // TestStaticHandlerBasicHeaders verifies that basic HTTP headers are set correctly.
 func TestStaticHandlerBasicHeaders(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
+	req := httptest.NewRequest(http.MethodGet, "/static/bulma.min.css", nil)
 	w := httptest.NewRecorder()
 
 	StaticHandler.ServeHTTP(w, req)
@@ -116,4 +126,97 @@ func TestStaticHandlerBasicHeaders(t *testing.T) {
 	if acceptRanges != "bytes" {
 		t.Errorf("Expected Accept-Ranges: bytes, got %s", acceptRanges)
 	}
+
+	// Static assets are cache-busted via ?v=N, so they may be cached forever.
+	if cc := w.Header().Get("Cache-Control"); cc != staticCacheControl {
+		t.Errorf("Expected Cache-Control %q, got %q", staticCacheControl, cc)
+	}
+}
+
+// TestStaticHandlerGzip verifies that a pre-compressed sibling is served when
+// the client accepts gzip, and that the plain file is served otherwise.
+func TestStaticHandlerGzip(t *testing.T) {
+	t.Run("ServesGzipWhenAccepted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/static/bulma.min.css", nil)
+		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+		w := httptest.NewRecorder()
+
+		StaticHandler.ServeHTTP(w, req)
+
+		if got := w.Header().Get("Content-Encoding"); got != "gzip" {
+			t.Errorf("Expected Content-Encoding gzip, got %q", got)
+		}
+		if !strings.Contains(w.Header().Get("Content-Type"), "text/css") {
+			t.Errorf("Expected the decoded Content-Type, got %q", w.Header().Get("Content-Type"))
+		}
+		if !strings.Contains(w.Header().Get("Vary"), "Accept-Encoding") {
+			t.Error("Expected Vary to include Accept-Encoding")
+		}
+
+		// The body must be real gzip, and smaller than the raw stylesheet.
+		body := w.Body.Bytes()
+		if len(body) < 2 || body[0] != 0x1f || body[1] != 0x8b {
+			t.Fatal("Response body is not gzip-encoded")
+		}
+		gz, err := gzip.NewReader(bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Failed to open gzip reader: %v", err)
+		}
+		defer func() { _ = gz.Close() }()
+		decoded, err := io.ReadAll(gz)
+		if err != nil {
+			t.Fatalf("Failed to decompress body: %v", err)
+		}
+		if !strings.Contains(string(decoded), "--bulma-scheme-main") {
+			t.Error("Decompressed body is not the Bulma stylesheet")
+		}
+		if len(body) >= len(decoded) {
+			t.Errorf("Gzip body (%d) is not smaller than raw (%d)", len(body), len(decoded))
+		}
+	})
+
+	t.Run("ServesPlainWhenGzipNotAccepted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/static/bulma.min.css", nil)
+		w := httptest.NewRecorder()
+
+		StaticHandler.ServeHTTP(w, req)
+
+		if got := w.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Expected no Content-Encoding, got %q", got)
+		}
+		if !strings.Contains(w.Body.String(), "--bulma-scheme-main") {
+			t.Error("Expected the plain Bulma stylesheet")
+		}
+	})
+
+	t.Run("ServesPlainWhenGzipRefused", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/static/bulma.min.css", nil)
+		req.Header.Set("Accept-Encoding", "gzip;q=0")
+		w := httptest.NewRecorder()
+
+		StaticHandler.ServeHTTP(w, req)
+
+		if got := w.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Expected no Content-Encoding for gzip;q=0, got %q", got)
+		}
+	})
+
+	t.Run("FallsBackWhenNoGzSibling", func(t *testing.T) {
+		// icons.svg has no pre-compressed sibling.
+		req := httptest.NewRequest(http.MethodGet, "/static/icons.svg", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		w := httptest.NewRecorder()
+
+		StaticHandler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected 200, got %d", w.Code)
+		}
+		if got := w.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Expected no Content-Encoding, got %q", got)
+		}
+		if !strings.Contains(w.Body.String(), "<svg") {
+			t.Error("Expected the icon sprite")
+		}
+	})
 }

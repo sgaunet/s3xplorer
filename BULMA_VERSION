@@ -1,0 +1,18 @@
+bulma 1.0.4
+
+source: https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css
+license: MIT (https://github.com/jgthms/bulma/blob/main/LICENSE)
+
+sha256:
+  bulma.min.css  67fa26df1ca9e95d8f2adc7c04fa1b15fa3d24257470ebc10cc68b9aab914bee
+
+The .gz siblings in pkg/views/static/ are generated with `gzip -9 -k -n` and are
+served by StaticHandler when the client sends Accept-Encoding: gzip. Regenerate
+them whenever the corresponding .css changes.
+
+To upgrade:
+  1. curl -sSLo pkg/views/static/bulma.min.css \
+       https://cdn.jsdelivr.net/npm/bulma@<VERSION>/css/bulma.min.css
+  2. gzip -9 -k -f -n pkg/views/static/bulma.min.css
+  3. Update the version and checksum above.
+  4. Review https://github.com/jgthms/bulma/blob/master/CHANGELOG.md

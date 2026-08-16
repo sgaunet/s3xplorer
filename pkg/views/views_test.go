@@ -11,7 +11,9 @@ import (
 func TestEmbeddedStaticAssets(t *testing.T) {
 	// Define required assets
 	requiredAssets := []string{
-		"static/app.css",
+		"static/bulma.min.css",
+		"static/bulma.min.css.gz",
+		"static/theme.css",
 		"static/app.js",
 		"static/icons.svg",
 		"static/file-heart.png",
@@ -41,17 +43,34 @@ func TestEmbeddedStaticAssets(t *testing.T) {
 		}
 	})
 
-	// Test 3: Verify app.css contains Tailwind CSS
-	t.Run("AppCSSContainsTailwind", func(t *testing.T) {
-		data, err := fs.ReadFile(staticCSS, "static/app.css")
+	// Test 3: Verify the vendored stylesheet really is Bulma
+	t.Run("BulmaCSSPresent", func(t *testing.T) {
+		data, err := fs.ReadFile(staticCSS, "static/bulma.min.css")
 		if err != nil {
-			t.Fatalf("Failed to read app.css: %v", err)
+			t.Fatalf("Failed to read bulma.min.css: %v", err)
 		}
 
 		content := string(data)
-		// Tailwind CSS includes this in the generated output
-		if !strings.Contains(content, "tailwindcss") && !strings.Contains(content, "Tailwind CSS") {
-			t.Error("app.css does not appear to contain Tailwind CSS content")
+		for _, want := range []string{"bulma.io", "--bulma-scheme-main", "[data-theme=dark]"} {
+			if !strings.Contains(content, want) {
+				t.Errorf("bulma.min.css does not contain %q", want)
+			}
+		}
+	})
+
+	// Test 3b: theme.css must size the sprite icons. Bulma sizes only the .icon
+	// wrapper, so without this rule every icon renders at the 300x150 SVG default.
+	t.Run("ThemeCSSSizesIcons", func(t *testing.T) {
+		data, err := fs.ReadFile(staticCSS, "static/theme.css")
+		if err != nil {
+			t.Fatalf("Failed to read theme.css: %v", err)
+		}
+
+		content := string(data)
+		for _, want := range []string{".icon > svg", "--s3x-icon", ".skip-link"} {
+			if !strings.Contains(content, want) {
+				t.Errorf("theme.css does not contain %q", want)
+			}
 		}
 	})
 
@@ -62,10 +81,10 @@ func TestEmbeddedStaticAssets(t *testing.T) {
 			t.Fatalf("Failed to read static directory: %v", err)
 		}
 
-		// Should have at least 4 files (app.css, app.js, icons.svg, file-heart.png)
-		// May have more if src/ directory is present
-		if len(entries) < 4 {
-			t.Errorf("Expected at least 4 entries in static directory, got %d", len(entries))
+		// bulma.min.css, bulma.min.css.gz, theme.css, theme.css.gz, app.js,
+		// icons.svg, file-heart.png
+		if len(entries) < 7 {
+			t.Errorf("Expected at least 7 entries in static directory, got %d", len(entries))
 		}
 
 		// Verify specific files exist in directory listing
@@ -74,7 +93,10 @@ func TestEmbeddedStaticAssets(t *testing.T) {
 			fileMap[entry.Name()] = true
 		}
 
-		expectedFiles := []string{"app.css", "app.js", "icons.svg", "file-heart.png"}
+		expectedFiles := []string{
+			"bulma.min.css", "bulma.min.css.gz", "theme.css",
+			"app.js", "icons.svg", "file-heart.png",
+		}
 		for _, expectedFile := range expectedFiles {
 			if !fileMap[expectedFile] {
 				t.Errorf("Expected file %s not found in static directory listing", expectedFile)

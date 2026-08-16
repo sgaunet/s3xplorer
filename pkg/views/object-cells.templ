@@ -1,0 +1,71 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dto"
+)
+
+// Shared table-cell fragments used by both the folder listing and search results.
+
+// emptyCell renders the placeholder shown where a column does not apply.
+templ emptyCell() {
+	<span class="has-text-weak" aria-hidden="true">—</span>
+	<span class="is-sr-only">Not applicable</span>
+}
+
+// modifiedCell renders an object's last-modified time, relative and absolute.
+templ modifiedCell(obj dto.S3Object) {
+	<time datetime={ obj.LastModified.Format("2006-01-02T15:04:05Z07:00") } title={ obj.LastModified.Format("2006-01-02 15:04:05") }>
+		{ formatRelativeTime(obj.LastModified) }
+	</time>
+	<p class="help has-text-weak">{ formatDateTime(obj.LastModified) }</p>
+}
+
+// objectActions renders the download and Glacier-restore controls for an object.
+templ objectActions(obj dto.S3Object, folder string, cfg config.Config) {
+	<div class="is-flex is-align-items-center is-gap-1">
+		if obj.IsDownloadable {
+			<a
+				class="button is-ghost is-small"
+				href={ downloadURL(obj.Key) }
+				title="Download"
+				aria-label={ fmt.Sprintf("Download %s", obj.Name) }
+			>
+				@Icon("download", "is-small")
+			</a>
+		}
+		if obj.IsRestoring {
+			<span class="button is-ghost is-small" disabled title="Restoring from Glacier" aria-label="Restoring from Glacier">
+				@Icon("loader", "is-small is-spinning")
+			</span>
+		} else if !obj.IsDownloadable && cfg.S3.EnableGlacierRestore {
+			<a
+				class="button is-ghost is-small"
+				href={ restoreURL(folder, obj.Key) }
+				title="Restore from Glacier"
+				aria-label={ fmt.Sprintf("Restore %s from Glacier", obj.Name) }
+			>
+				@Icon("cloud-upload", "is-small")
+			</a>
+		}
+	</div>
+}
+
+// folderURL builds a listing URL for a folder, resetting to the first page.
+func folderURL(key string) templ.SafeURL {
+	return templ.SafeURL(fmt.Sprintf("/?folder=%s&page=1", url.QueryEscape(key)))
+}
+
+// downloadURL builds the download URL for an object key.
+func downloadURL(key string) templ.SafeURL {
+	return templ.SafeURL(fmt.Sprintf("/download?key=%s", url.QueryEscape(key)))
+}
+
+// restoreURL builds the Glacier restore URL for an object key.
+func restoreURL(folder string, key string) templ.SafeURL {
+	return templ.SafeURL(fmt.Sprintf("/restore?folder=%s&key=%s",
+		url.QueryEscape(folder), url.QueryEscape(key)))
+}

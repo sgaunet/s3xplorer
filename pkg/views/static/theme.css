@@ -1,0 +1,204 @@
+/*
+ * s3xplorer theme layer.
+ *
+ * Loaded after bulma.min.css. Everything here is either a Bulma design-token
+ * override or a rule for something Bulma has no component for. Prefer a Bulma
+ * class over adding to this file.
+ */
+
+/* ── Brand ──────────────────────────────────────────────────────────────── */
+
+/* Keep the blue the UI has always used (Tailwind blue-600, hsl(221,83%,53%))
+   as the link/action colour. Bulma derives hover, active, -light, -dark and
+   the inverted label colour from these.
+ *
+ * --bulma-link-l drives component fills (.button.is-link), while
+ * --bulma-link-on-scheme-l drives link *text*. They are tuned separately so
+ * body text clears WCAG AA (4.5:1) against the scheme background in both
+ * themes; Bulma's own defaults land nearer 4:1.
+ *
+ * These are declared on the [data-theme] selectors, not only :root, because
+ * Bulma re-declares them inside its own theme blocks, which come later in the
+ * cascade and would otherwise win. */
+:root,
+[data-theme="light"] {
+  --bulma-link-h: 221;
+  --bulma-link-s: 83%;
+  --bulma-link-l: 53%;
+  --bulma-link-on-scheme-l: 45%;
+}
+
+[data-theme="dark"] {
+  --bulma-link-h: 221;
+  --bulma-link-s: 83%;
+  /* Deliberately the same lightness as the light theme: raising it pushes the
+     white .button.is-link label below 4.5:1 against the button fill. */
+  --bulma-link-l: 53%;
+  --bulma-link-on-scheme-l: 72%;
+}
+
+/* Theme-aware muted text. Bulma exposes --bulma-text-weak but ships no helper
+   class for it, and its .has-text-grey is a hard-coded #69748c that only
+   reaches 3.86:1 on the dark scheme background. */
+.has-text-weak {
+  color: var(--bulma-text-weak) !important;
+}
+
+/* ── Icons ──────────────────────────────────────────────────────────────── */
+
+/* Bulma sizes the .icon wrapper only, and our sprite <symbol>s carry a viewBox
+   but no width/height — an unsized <svg> would fall back to the 300x150
+   replaced-element default. Drive the svg from Bulma's own dimension tokens so
+   is-small/is-medium/is-large stay correct, and so the svg keeps its own size
+   inside .control.has-icons-left, whose .icon box Bulma forces to the input
+   height. */
+.icon {
+  --s3x-icon: var(--bulma-icon-dimensions);
+}
+
+.icon.is-small {
+  --s3x-icon: var(--bulma-icon-dimensions-small);
+}
+
+.icon.is-medium {
+  --s3x-icon: var(--bulma-icon-dimensions-medium);
+}
+
+.icon.is-large {
+  --s3x-icon: var(--bulma-icon-dimensions-large);
+}
+
+.icon > svg {
+  width: var(--s3x-icon);
+  height: var(--s3x-icon);
+}
+
+/* Bulma has no spin utility; used by the Glacier restore indicator. */
+@keyframes s3x-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon.is-spinning > svg {
+  animation: s3x-spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon.is-spinning > svg {
+    animation: none;
+  }
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────────────── */
+
+/* Bulma's .navbar-item.is-active pairs a link-coloured background with the
+   default text colour (~2.5:1, below WCAG AA). Mark the current page with a
+   link-coloured label and an underline instead. */
+.navbar-item.is-active {
+  background-color: transparent;
+  color: var(--bulma-link-text);
+  box-shadow: inset 0 -2px 0 0 var(--bulma-link);
+}
+
+.navbar-item.is-active:hover {
+  background-color: var(--bulma-navbar-item-hover-background-color);
+}
+
+/* ── Theme toggle ───────────────────────────────────────────────────────── */
+
+/* Show the moon in dark mode and the sun in light mode, with no JS.
+   Defaults to the sun so the control is never blank before the theme is set. */
+[data-theme="dark"] .theme-icon-light,
+.theme-icon-dark {
+  display: none;
+}
+
+[data-theme="dark"] .theme-icon-dark {
+  display: inline-flex;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+
+/* A table wider than the viewport must scroll inside .table-container, not
+   drag the whole page sideways. Stock Bulma still leaks ~24px of page-level
+   horizontal scroll on narrow viewports; this contains it. Scoped to body so
+   the sticky header below (which scrolls within .table-container, not the
+   viewport) keeps working. */
+body {
+  overflow-x: hidden;
+}
+
+/* Sticky header for long listings. Bulma has no equivalent. */
+.table-container.is-sticky-head {
+  max-height: 75vh;
+  overflow: auto;
+}
+
+.table-container.is-sticky-head thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bulma-scheme-main);
+}
+
+/* Keep row height stable regardless of which cells have content. */
+.table td {
+  vertical-align: middle;
+}
+
+/* ── Keyboard hints ─────────────────────────────────────────────────────── */
+
+/* Bulma has no <kbd> component. */
+kbd {
+  display: inline-block;
+  padding: 0.15em 0.45em;
+  font-family: var(--bulma-family-code);
+  font-size: 0.8em;
+  line-height: 1.4;
+  color: var(--bulma-text-strong);
+  background-color: var(--bulma-scheme-main-bis);
+  border: 1px solid var(--bulma-border);
+  border-bottom-width: 2px;
+  border-radius: var(--bulma-radius-small);
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+
+.s3x-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+}
+
+/* ── Accessibility ──────────────────────────────────────────────────────── */
+
+/* Reveal the skip link once it receives keyboard focus. */
+.skip-link.is-sr-only:focus {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  width: auto !important;
+  height: auto !important;
+  padding: 0.75rem 1.25rem !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  color: var(--bulma-link-invert);
+  background-color: var(--bulma-link);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Give the sprite-icon links in table rows a visible keyboard focus ring;
+   the app supports arrow-key row navigation. */
+.table a:focus-visible,
+.breadcrumb a:focus-visible {
+  outline: 2px solid var(--bulma-link);
+  outline-offset: 2px;
+  border-radius: var(--bulma-radius-small);
+}

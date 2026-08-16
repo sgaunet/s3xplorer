@@ -1,0 +1,55 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/sgaunet/s3xplorer/pkg/config"
+)
+
+// Layout renders the shared page shell: head, theme bootstrap, navbar and the
+// <main> content region. Every full page template wraps its body in this.
+templ Layout(opts PageOpts, cfg config.Config) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ opts.Title }</title>
+			if opts.RefreshSecs > 0 {
+				<meta http-equiv="refresh" content={ fmt.Sprintf("%d", opts.RefreshSecs) }/>
+			}
+			<link rel="icon" href="/favicon.ico" type="image/png"/>
+			@themeBootstrap()
+			<link rel="stylesheet" href={ asset("/static/bulma.min.css") }/>
+			<link rel="stylesheet" href={ asset("/static/theme.css") }/>
+			<script src={ asset("/static/app.js") } defer></script>
+		</head>
+		<body>
+			@SkipToContent()
+			@MenuWithConfig(cfg, opts.ActivePage)
+			<main id="main-content" role="main" class="section">
+				<div class={ "container", opts.container() }>
+					{ children... }
+				</div>
+			</main>
+		</body>
+	</html>
+}
+
+// themeBootstrap applies the saved theme before first paint. app.js is
+// deferred, so without this the page would flash light before going dark.
+templ themeBootstrap() {
+	<script>
+		(function () {
+			try {
+				var saved = localStorage.getItem('theme');
+				var dark = saved
+					? saved === 'dark'
+					: window.matchMedia('(prefers-color-scheme: dark)').matches;
+				document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+			} catch (e) {
+				document.documentElement.dataset.theme = 'light';
+			}
+		})();
+	</script>
+}

@@ -1,181 +1,129 @@
 package views
 
 import (
-  "github.com/sgaunet/s3xplorer/pkg/config"
-  "github.com/sgaunet/s3xplorer/pkg/dto"
-  "fmt"
+	"fmt"
+
+	"github.com/sgaunet/s3xplorer/pkg/config"
+	"github.com/sgaunet/s3xplorer/pkg/dto"
 )
 
+// RenderSearch renders the search form and its results.
 templ RenderSearch(searchStr string, folder string, objects []dto.S3Object, cfg config.Config) {
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Search - s3xplorer</title>
-    <link rel="stylesheet" href="/static/app.css?v=2" />
-    <script src="/static/app.js?v=2" defer></script>
-  </head>
-  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
-    @SkipToContent()
-    @MenuWithConfig(cfg, "search")
-
-    <main id="main-content" role="main" class="py-8">
-      <div class="max-w-4xl mx-auto px-6">
-        <div class="mb-8">
-          <form action="/search">
-            <label for="searchstr" class="block text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Search files and folders
-            </label>
-            <div class="flex gap-2">
-              <div class="relative flex-1">
-                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  @Icon("search", "w-5 h-5 text-gray-400 dark:text-gray-500")
-                </div>
-                <input
-                  type="text"
-                  id="searchstr"
-                  name="searchstr"
-                  class="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-950 transition-colors text-base"
-                  placeholder="Enter search term..."
-                  value={ searchStr }
-                  autofocus
-                  autocomplete="off"
-                  aria-label="Search files and folders"
-                />
-              </div>
-              <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
-                Search
-              </button>
-            </div>
-            <div class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-              <kbd class="inline-flex items-center px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded">Ctrl</kbd>
-              <span class="mx-1">+</span>
-              <kbd class="inline-flex items-center px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded">K</kbd>
-              <span class="ml-1">to focus search</span>
-            </div>
-          </form>
-
-          if searchStr != "" {
-            <div class="mt-6 text-sm text-gray-600 dark:text-gray-400">
-              <span class="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 rounded-full font-semibold">
-                { fmt.Sprintf("%d", len(objects)) }
-              </span>
-              <span class="ml-2">
-                result(s) for
-                <em class="font-medium text-gray-900 dark:text-white">"{ searchStr }"</em>
-              </span>
-            </div>
-          }
-        </div>
-      </div>
-
-      if len(objects) > 0 {
-        <div class="max-w-7xl mx-auto px-6 mt-8">
-          <div class="overflow-x-auto">
-            <table role="grid" class="w-full border-collapse" aria-label="Search results">
-              <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-                <tr role="row">
-                  <th class="w-12 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Type</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Name</th>
-                  <th class="w-32 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Size</th>
-                  <th class="w-48 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Modified</th>
-                  <th class="w-32 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Storage</th>
-                  <th class="w-24 px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" role="columnheader">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white dark:bg-gray-950 divide-y divide-gray-200 dark:divide-gray-800">
-                for _, obj := range objects {
-                  <tr role="row" class="hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
-                    <td class="px-4 py-4 text-center" role="gridcell">
-                      if obj.IsFolder {
-                        @Icon("folder", "w-6 h-6 text-blue-500 dark:text-blue-400")
-                      } else {
-                        @Icon(getFileIconName(obj.Name), "w-6 h-6 text-gray-500 dark:text-gray-400")
-                      }
-                    </td>
-                    <td class="px-4 py-4" role="gridcell">
-                      if obj.IsFolder {
-                        <a href={ templ.URL(fmt.Sprintf("/?folder=%s",obj.Key)) } class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline" aria-label={ fmt.Sprintf("Open folder: %s", obj.Key) }>
-                          { obj.Key }
-                        </a>
-                      } else {
-                        if obj.IsDownloadable {
-                          <a href={ templ.URL(fmt.Sprintf("/download?key=%s",obj.Key)) } class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
-                            { obj.Key }
-                          </a>
-                        } else {
-                          <span class="font-medium text-gray-900 dark:text-white">{ obj.Key }</span>
-                        }
-                        <div class="mt-1">
-                          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                            { getFileTypeLabel(obj.Key) }
-                          </span>
-                        </div>
-                      }
-                    </td>
-                    <td class="px-4 py-4" role="gridcell">
-                      if !obj.IsFolder {
-                        <span class="font-medium text-gray-900 dark:text-white">{ formatSize(obj.Size) }</span>
-                      } else {
-                        <span class="text-gray-400 dark:text-gray-600">—</span>
-                      }
-                    </td>
-                    <td class="px-4 py-4" role="gridcell">
-                      if !obj.IsFolder {
-                        <div>
-                          <span class="text-gray-900 dark:text-white" title={ obj.LastModified.Format("2006-01-02 15:04:05") }>
-                            { formatRelativeTime(obj.LastModified) }
-                          </span>
-                          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                            { formatDateTime(obj.LastModified) }
-                          </div>
-                        </div>
-                      } else {
-                        <span class="text-gray-400 dark:text-gray-600">—</span>
-                      }
-                    </td>
-                    <td class="px-4 py-4" role="gridcell">
-                      if !obj.IsFolder {
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                          { obj.StorageClass }
-                        </span>
-                      } else {
-                        <span class="text-gray-400 dark:text-gray-600">—</span>
-                      }
-                    </td>
-                    <td class="px-4 py-4" role="gridcell">
-                      if !obj.IsFolder {
-                        <div class="flex items-center gap-2">
-                          if obj.IsDownloadable {
-                            <a href={ templ.URL(fmt.Sprintf("/download?key=%s",obj.Key)) } class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Download" aria-label={ fmt.Sprintf("Download %s", obj.Key) }>
-                              @Icon("download", "w-5 h-5")
-                            </a>
-                          }
-                          if obj.IsRestoring {
-                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-400 dark:text-gray-600 cursor-not-allowed" title="Restoring from Glacier" aria-label="Restoring from Glacier">
-                              @Icon("loader", "w-5 h-5 animate-spin")
-                            </span>
-                          }
-                          if ! obj.IsRestoring {
-                            if ! obj.IsDownloadable && cfg.S3.EnableGlacierRestore {
-                              <a href={ templ.URL(fmt.Sprintf("/restore?folder=%s&key=%s",folder,obj.Key)) } class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Restore from Glacier" aria-label={ fmt.Sprintf("Restore %s from Glacier", obj.Key) }>
-                                @Icon("cloud-upload", "w-5 h-5")
-                              </a>
-                            }
-                          }
-                        </div>
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      } else if searchStr != "" {
-        @EmptyState("search", "No results found", "Try a different search term or check your spelling")
-      }
-    </main>
-  </body>
-</html>
+	@Layout(PageOpts{
+		Title:      "Search - s3xplorer",
+		ActivePage: "search",
+	}, cfg) {
+		<form class="mb-5" action="/search">
+			<div class="field">
+				<label class="label is-medium" for="searchstr">Search files and folders</label>
+				<div class="field has-addons">
+					<div class="control is-expanded has-icons-left">
+						<input
+							class="input is-medium"
+							type="text"
+							id="searchstr"
+							name="searchstr"
+							placeholder="Enter search term..."
+							value={ searchStr }
+							autofocus
+							autocomplete="off"
+							aria-label="Search files and folders"
+						/>
+						<span class="icon is-left">
+							<svg aria-hidden="true"><use href="/static/icons.svg#search"></use></svg>
+						</span>
+					</div>
+					<div class="control">
+						<button class="button is-link is-medium" type="submit">Search</button>
+					</div>
+				</div>
+				<p class="help">
+					<kbd>Ctrl</kbd> + <kbd>K</kbd> to focus search
+				</p>
+			</div>
+		</form>
+		if searchStr != "" {
+			<p class="mb-5 is-flex is-align-items-center is-gap-2">
+				<span class="tag is-link is-medium">{ fmt.Sprintf("%d", len(objects)) }</span>
+				<span class="has-text-weak">
+					result(s) for <em class="has-text-weight-semibold">{ searchStr }</em>
+				</span>
+			</p>
+		}
+		if len(objects) > 0 {
+			<div class="table-container is-sticky-head">
+				<table class="table is-fullwidth is-hoverable is-striped" role="grid" aria-label="Search results">
+					<thead>
+						<tr role="row">
+							<th class="is-narrow" role="columnheader"><span class="is-sr-only">Type</span></th>
+							<th role="columnheader">Name</th>
+							<th class="is-narrow" role="columnheader">Size</th>
+							<th class="is-narrow" role="columnheader">Modified</th>
+							<th class="is-narrow" role="columnheader">Storage</th>
+							<th class="is-narrow" role="columnheader">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, obj := range objects {
+							<tr role="row">
+								<td class="is-narrow has-text-centered" role="gridcell">
+									if obj.IsFolder {
+										@Icon("folder", "has-text-link")
+									} else {
+										@Icon(getFileIconName(obj.Name), "has-text-weak")
+									}
+								</td>
+								<td role="gridcell">
+									if obj.IsFolder {
+										<a
+											class="has-text-weight-semibold"
+											href={ folderURL(obj.Key) }
+											aria-label={ fmt.Sprintf("Open folder: %s", obj.Key) }
+										>
+											{ obj.Key }
+										</a>
+									} else {
+										if obj.IsDownloadable {
+											<a href={ downloadURL(obj.Key) }>{ obj.Key }</a>
+										} else {
+											<span class="has-text-weight-medium">{ obj.Key }</span>
+										}
+										<p class="mt-1"><span class="tag is-small">{ getFileTypeLabel(obj.Key) }</span></p>
+									}
+								</td>
+								<td class="is-narrow" role="gridcell">
+									if obj.IsFolder {
+										@emptyCell()
+									} else {
+										<span class="has-text-weight-medium">{ formatSize(obj.Size) }</span>
+									}
+								</td>
+								<td class="is-narrow" role="gridcell">
+									if obj.IsFolder {
+										@emptyCell()
+									} else {
+										@modifiedCell(obj)
+									}
+								</td>
+								<td class="is-narrow" role="gridcell">
+									if obj.IsFolder {
+										@emptyCell()
+									} else {
+										<span class="tag is-rounded">{ obj.StorageClass }</span>
+									}
+								</td>
+								<td class="is-narrow" role="gridcell">
+									if !obj.IsFolder {
+										@objectActions(obj, folder, cfg)
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		} else if searchStr != "" {
+			@EmptyState("search", "No results found", "Try a different search term or check your spelling")
+		}
+	}
 }

@@ -2,32 +2,47 @@
  * s3xplorer Application Scripts
  */
 
-// Theme management
+// Theme management.
+//
+// The initial theme is resolved by an inline <head> script (see layout.templ)
+// so Bulma's [data-theme] rules apply before first paint. This file only
+// handles the user toggling it afterwards.
 function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.classList.contains('dark');
-
-  if (isDark) {
-    html.classList.remove('dark');
-    localStorage.setItem('theme', 'light');
-  } else {
-    html.classList.add('dark');
-    localStorage.setItem('theme', 'dark');
+  const el = document.documentElement;
+  const next = el.dataset.theme === 'dark' ? 'light' : 'dark';
+  el.dataset.theme = next;
+  try {
+    localStorage.setItem('theme', next);
+  } catch (e) {
+    // Storage unavailable (private mode); the theme still applies for this page.
   }
 }
 
-// Initialize theme from localStorage or system preference
-(function initTheme() {
-  const saved = localStorage.getItem('theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const theme = saved || (prefersDark ? 'dark' : 'light');
-
-  if (theme === 'dark') {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
+// Keep following the OS setting until the user makes an explicit choice.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  let stored = null;
+  try {
+    stored = localStorage.getItem('theme');
+  } catch (err) {
+    stored = null;
   }
-})();
+  if (stored !== 'dark' && stored !== 'light') {
+    document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+  }
+});
+
+// Bulma ships no JavaScript, so the mobile navbar burger must be wired by hand.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.navbar-burger').forEach((burger) => {
+    const menu = document.getElementById(burger.dataset.target);
+    if (!menu) return;
+    burger.addEventListener('click', () => {
+      const open = burger.classList.toggle('is-active');
+      menu.classList.toggle('is-active', open);
+      burger.setAttribute('aria-expanded', String(open));
+    });
+  });
+});
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {

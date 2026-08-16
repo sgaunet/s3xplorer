@@ -2,42 +2,24 @@ package views
 
 import "github.com/sgaunet/s3xplorer/pkg/config"
 
+// RenderError renders a standalone error page.
 templ RenderError(errMsg string) {
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Error - s3xplorer</title>
-    <link rel="stylesheet" href="/static/app.css?v=2" />
-    <script src="/static/app.js?v=2" defer></script>
-  </head>
-  <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
-    @SkipToContent()
-    @MenuWithConfig(config.Config{}, "")
-
-    <main id="main-content" role="main" class="py-8">
-      <div class="max-w-2xl mx-auto px-6">
-        <div class="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
-          <header class="flex items-center gap-3 mb-4">
-            @Icon("alert-triangle", "w-8 h-8 text-red-600 dark:text-red-400")
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Error</h1>
-          </header>
-          <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <p class="text-sm text-red-800 dark:text-red-300">{ errMsg }</p>
-          </div>
-          <footer>
-            <a
-              href="/"
-              class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-            >
-              @Icon("home", "w-4 h-4")
-              <span>Return to Home</span>
-            </a>
-          </footer>
-        </div>
-      </div>
-    </main>
-  </body>
-</html>
+	@Layout(PageOpts{
+		Title:     "Error - s3xplorer",
+		Container: ContainerNarrow,
+	}, config.Config{}) {
+		<div class="box">
+			<h1 class="title is-4 is-flex is-align-items-center is-gap-2">
+				@Icon("alert-triangle", "is-medium has-text-danger")
+				<span>Error</span>
+			</h1>
+			<div class="notification is-danger is-light">
+				{ errMsg }
+			</div>
+			<a class="button is-link" href="/">
+				@Icon("home", "is-small")
+				<span class="ml-2">Return to Home</span>
+			</a>
+		</div>
+	}
 }

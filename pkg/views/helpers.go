@@ -3,7 +3,9 @@ package views
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +21,37 @@ const (
 
 	// etagDisplayLength is the maximum length for displaying ETags.
 	etagDisplayLength = 40
+
+	// etagCellLength is the truncation length for ETags shown in table cells.
+	etagCellLength = 8
+
+	// sizeBase is the divisor between successive human-readable size units.
+	sizeBase = 1024
 )
+
+// sizeUnits are the human-readable size units, in ascending order.
+var sizeUnits = []string{"Bytes", "KB", "MB", "GB", "TB", "PB"}
+
+// formatSize converts a size in bytes to a human-readable string.
+func formatSize(sizeInBytes int64) string {
+	if sizeInBytes <= 0 {
+		return "0 Bytes"
+	}
+
+	// Pick the unit by dividing by sizeBase repeatedly, capped at the largest unit.
+	i := math.Floor(math.Log(float64(sizeInBytes)) / math.Log(float64(sizeBase)))
+	if i >= float64(len(sizeUnits)) {
+		i = float64(len(sizeUnits) - 1)
+	}
+
+	size := float64(sizeInBytes) / math.Pow(float64(sizeBase), i)
+
+	// Whole numbers for bytes, one decimal place for everything larger.
+	if i == 0 {
+		return fmt.Sprintf("%d %s", int64(size), sizeUnits[int(i)])
+	}
+	return fmt.Sprintf("%.1f %s", size, sizeUnits[int(i)])
+}
 
 // formatRelativeTime converts a time.Time to a human-readable relative time string.
 func formatRelativeTime(t time.Time) string {
@@ -140,71 +172,6 @@ func getFileTypeLabel(filename string) string {
 	return strings.ToUpper(ext)
 }
 
-// Icon renders an SVG icon from the sprite sheet.
-// Size utilities (Tailwind):
-//   - icon-xs → w-3 h-3 (12px)
-//   - icon-sm → w-4 h-4 (16px)
-//   - icon (default) → w-5 h-5 (20px)
-//   - icon-lg → w-6 h-6 (24px)
-//   - icon-xl → w-8 h-8 (32px)
-//   - icon-2xl → w-10 h-10 (40px)
-//   - icon-3xl → w-12 h-12 (48px)
-func Icon(name string, class string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		// Convert custom icon size classes to Tailwind utilities
-		class = convertIconSizeToTailwind(class)
-
-		_, err := fmt.Fprintf(w,
-			`<svg class="inline-block %s" aria-hidden="true"><use href="/static/icons.svg#%s"></use></svg>`,
-			class, name)
-		return err
-	})
-}
-
-// convertIconSizeToTailwind converts custom icon size classes to Tailwind utilities.
-func convertIconSizeToTailwind(class string) string {
-	// Replace icon size classes with Tailwind utilities
-	class = strings.ReplaceAll(class, "icon-3xl", "w-12 h-12")
-	class = strings.ReplaceAll(class, "icon-2xl", "w-10 h-10")
-	class = strings.ReplaceAll(class, "icon-xl", "w-8 h-8")
-	class = strings.ReplaceAll(class, "icon-lg", "w-6 h-6")
-	class = strings.ReplaceAll(class, "icon-sm", "w-4 h-4")
-	class = strings.ReplaceAll(class, "icon-xs", "w-3 h-3")
-
-	// Replace standalone "icon" with default size (but preserve icon-* variants)
-	// Only replace if it's the whole word "icon" not part of another class
-	switch {
-	case class == "icon":
-		class = "w-5 h-5"
-	case strings.HasPrefix(class, "icon "):
-		after, _ := strings.CutPrefix(class, "icon ")
-		class = "w-5 h-5 " + after
-	case strings.HasSuffix(class, " icon"):
-		before, _ := strings.CutSuffix(class, " icon")
-		class = before + " w-5 h-5"
-	case strings.Contains(class, " icon "):
-		class = strings.ReplaceAll(class, " icon ", " w-5 h-5 ")
-	}
-
-	return class
-}
-
-// IconWithLabel renders icon with accessible label.
-func IconWithLabel(name string, label string, class string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		// Convert custom icon size classes to Tailwind utilities
-		class = convertIconSizeToTailwind(class)
-
-		_, err := fmt.Fprintf(w,
-			`<span class="inline-flex items-center gap-1">
-                <svg class="inline-block %s" aria-label="%s"><use href="/static/icons.svg#%s"></use></svg>
-                <span class="sr-only">%s</span>
-            </span>`,
-			class, label, name, label)
-		return err
-	})
-}
-
 // getFileIconName returns an appropriate Lucide icon name for a file based on its extension.
 func getFileIconName(filename string) string {
 	ext := strings.ToLower(filename)
@@ -238,37 +205,48 @@ func getFileIconName(filename string) string {
 	return "file"
 }
 
-// StatusBadge renders a status badge component with Tailwind utilities.
-// Badge pattern: inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium
-//   - Success: bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300
-//   - Error: bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300
+// Icon renders an SVG sprite icon inside a Bulma icon wrapper.
+//
+// class carries Bulma modifiers, any combination of:
+//   - size:  "" (default, 1.5rem), "is-small", "is-medium", "is-large"
+//   - color: "has-text-link", "has-text-weak", "has-text-danger", "has-text-success", ...
+//   - state: "is-spinning" (defined in theme.css)
+//
+// The sprite uses stroke="currentColor", so colour is inherited from the wrapper.
+func Icon(name string, class string) templ.Component {
+	return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := fmt.Fprintf(w,
+			`<span class="icon %s"><svg aria-hidden="true"><use href="/static/icons.svg#%s"></use></svg></span>`,
+			class, name)
+		return err
+	})
+}
+
+// Bucket accessibility states understood by StatusBadge.
+const (
+	statusAccessible   = "accessible"
+	statusInaccessible = "inaccessible"
+)
+
+// StatusBadge renders a bucket accessibility status as a Bulma tag.
+// Both variants are theme-aware, so no dark-mode handling is needed.
 func StatusBadge(status string, message string) templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+	return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
 		switch status {
-		case "accessible":
-			badgeClasses := "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium " +
-				"bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-			_, err := fmt.Fprintf(w,
-				`<span class="%s" role="status">
-					<svg class="inline-block w-4 h-4" aria-hidden="true"><use href="/static/icons.svg#check-circle"></use></svg>
-					<span>Accessible</span>
-				</span>`, badgeClasses)
-			return err
-		case "inaccessible":
-			badgeClasses := "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium " +
-				"bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-			html := fmt.Sprintf(`<span class="%s" role="status">
-				<svg class="inline-block w-4 h-4" aria-hidden="true"><use href="/static/icons.svg#x-circle"></use></svg>
-				<span>Inaccessible</span>
-			</span>`, badgeClasses)
-
-			if message != "" {
-				html += fmt.Sprintf(`<div class="mt-1 text-xs text-gray-600 dark:text-gray-400" title="%s">
-					<small>%s</small>
-				</div>`, message, truncateETag(message, etagDisplayLength))
+		case statusAccessible:
+			return writeStatusTag(w, "is-success", "check-circle", "Accessible")
+		case statusInaccessible:
+			if err := writeStatusTag(w, "is-danger", "x-circle", "Inaccessible"); err != nil {
+				return err
 			}
-
-			_, err := fmt.Fprintf(w, "%s", html)
+			if message == "" {
+				return nil
+			}
+			// The message comes from the S3 API, so it must be escaped.
+			_, err := fmt.Fprintf(w,
+				`<p class="help has-text-weak mt-1" title="%s">%s</p>`,
+				html.EscapeString(message),
+				html.EscapeString(truncateETag(message, etagDisplayLength)))
 			return err
 		default:
 			return nil
@@ -276,194 +254,51 @@ func StatusBadge(status string, message string) templ.Component {
 	})
 }
 
-// SkipToContent renders a skip to content link for accessibility.
-// The link is visually hidden but becomes visible when focused via keyboard.
+// writeStatusTag writes a single Bulma tag with a leading sprite icon.
+func writeStatusTag(w io.Writer, tone string, icon string, label string) error {
+	_, err := fmt.Fprintf(w,
+		`<span class="tag %s is-light" role="status">`+
+			`<span class="icon is-small"><svg aria-hidden="true">`+
+			`<use href="/static/icons.svg#%s"></use></svg></span>`+
+			`<span class="ml-1">%s</span></span>`,
+		tone, icon, label)
+	return err
+}
+
+// SkipToContent renders a skip link for keyboard users.
+// It is visually hidden until focused; theme.css handles the reveal.
 func SkipToContent() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		linkClasses := "sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 " +
-			"focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:font-medium"
-		_, err := fmt.Fprintf(w,
-			`<a href="#main-content" class="%s">
-                Skip to main content
-            </a>`, linkClasses)
+	return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := fmt.Fprint(w,
+			`<a href="#main-content" class="skip-link is-sr-only">Skip to main content</a>`)
 		return err
 	})
 }
 
 /*
 ─────────────────────────────────────────────────────────────────────────────
-TAILWIND CSS COMPONENT PATTERNS
+BULMA COMPONENT PATTERNS
 ─────────────────────────────────────────────────────────────────────────────
 
-This section documents reusable Tailwind CSS patterns for consistent styling
-across the application. Apply these classes directly in .templ templates.
+The UI is styled with Bulma 1.x (https://bulma.io/documentation/). Bulma is a
+classes-only framework: there is no build step and no purge pass, so any class
+in the Bulma docs is available immediately. See BULMA_VERSION for the pinned
+release, and pkg/views/static/theme.css for the handful of rules Bulma lacks.
 
-BUTTON PATTERNS
-───────────────
+Dark mode is native: `data-theme="dark"` on <html> (set before first paint by
+the inline script in layout.templ). Never write theme-conditional classes —
+Bulma's semantic colours already adapt.
 
-Primary Button (Call-to-action):
-  Base classes:
-    bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium
-    transition-colors duration-200
-
-  With focus ring:
-    bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium
-    focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
-    transition-colors duration-200
-
-  Dark mode variant:
-    bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600
-    text-white px-4 py-2 rounded-lg font-medium
-
-  Example usage:
-    <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">
-      Submit
-    </button>
-
-Secondary Button (Neutral action):
-  Base classes:
-    bg-gray-100 hover:bg-gray-200 text-gray-900 px-4 py-2 rounded-lg font-medium
-    transition-colors duration-200
-
-  Dark mode variant:
-    bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
-    text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium
-
-  Example usage:
-    <button class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700
-                   text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-medium">
-      Cancel
-    </button>
-
-Action Button (Icon + text in lists):
-  Base classes:
-    inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200
-    dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100
-    px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200
-
-  With icon example:
-    <button class="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200
-                   dark:bg-gray-800 dark:hover:bg-gray-700 px-3 py-1.5 rounded-md text-sm font-medium">
-      @Icon("download", "w-4 h-4")
-      <span>Download</span>
-    </button>
-
-Danger Button (Destructive action):
-  Base classes:
-    bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600
-    text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200
-
-  Example usage:
-    <button class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium">
-      Delete
-    </button>
-
-Ghost Button (Minimal style):
-  Base classes:
-    hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100
-    px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200
-
-  Example usage:
-    <button class="hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-1.5 rounded-md text-sm font-medium">
-      View Details
-    </button>
-
-Disabled Button:
-  Add to any button pattern:
-    opacity-50 cursor-not-allowed pointer-events-none
-
-  Example:
-    <button class="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium opacity-50 cursor-not-allowed" disabled>
-      Submit
-    </button>
-
-LINK PATTERNS
-─────────────
-
-Primary Link:
-  text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300
-  underline decoration-1 underline-offset-2
-
-Secondary Link (No underline by default):
-  text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300
-  hover:underline
-
-FORM INPUT PATTERNS
-───────────────────
-
-Text Input:
-  w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-  rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-  focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors
-
-Search Input:
-  w-full px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600
-  rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-  focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-
-CARD PATTERNS
-─────────────
-
-Basic Card:
-  bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200
-  dark:border-gray-700 p-4
-
-Card with Hover:
-  bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200
-  dark:border-gray-700 p-4 hover:shadow-md transition-shadow duration-200
-
-BADGE PATTERNS
-──────────────
-
-See StatusBadge() function for success/error badge implementation.
-
-Info Badge:
-  inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium
-  bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300
-
-Warning Badge:
-  inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium
-  bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300
-
-SPACING & LAYOUT
-────────────────
-
-Container padding:
-  px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10
-
-Section spacing:
-  mb-6 md:mb-8 lg:mb-10
-
-Gap between items:
-  gap-2    (8px)  - Tight spacing
-  gap-4    (16px) - Default spacing
-  gap-6    (24px) - Relaxed spacing
-
-RESPONSIVE BREAKPOINTS
-──────────────────────
-
-sm:  640px  - Small tablets
-md:  768px  - Tablets
-lg:  1024px - Small desktops
-xl:  1280px - Large desktops
-2xl: 1536px - Extra large screens
-
-Example responsive button:
-  <button class="px-3 py-1.5 text-sm md:px-4 md:py-2 md:text-base lg:px-6 lg:py-3">
-    Responsive Button
-  </button>
-
-ACCESSIBILITY
-─────────────
-
-Focus rings (required for keyboard navigation):
-  focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
-
-Screen reader only text:
-  sr-only (utility class that hides content visually but keeps it for screen readers)
-
-Skip to content link pattern (already implemented in SkipToContent()):
-  See SkipToContent() function
-
-─────────────────────────────────────────────────────────────────────────────
+Layout      @Layout(PageOpts{...}, cfg) — the shared page shell.
+            Containers: is-max-widescreen (tables), is-max-desktop, is-max-tablet.
+Cards       .box
+Tables      .table-container > .table.is-fullwidth.is-hoverable.is-striped
+Buttons     .button.is-link (primary), .is-danger, .is-ghost (icon-only).
+            Use the native `disabled` attribute — Bulma styles it.
+Badges      .tag, .tag.is-rounded, .tag.is-success.is-light
+Alerts      .notification.is-danger.is-light, .is-info.is-light
+Inputs      .field > .control.has-icons-left > .input + .icon.is-left
+Helpers     is-hidden, is-sr-only, is-flex, is-align-items-center, is-gap-N,
+            is-hidden-mobile / is-hidden-tablet, and margin/padding helpers
+            (mt-4, mb-5, px-4, ...) on a 0–6 spacing scale.
 */
