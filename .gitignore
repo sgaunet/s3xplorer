@@ -9,3 +9,4 @@ postgres_data
 /bin/
 /.taskmaster
 /.claude
+/govulncheck.sarif
