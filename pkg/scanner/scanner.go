@@ -611,14 +611,12 @@ func (s *Service) classifyBucketError(err error) BucketErrorType {
 	}
 
 	// Check for AWS API errors
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[smithy.APIError](err); ok {
 		return classifyAPIError(apiErr.ErrorCode())
 	}
 
 	// Check for HTTP response errors
-	var httpErr *smithyhttp.ResponseError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*smithyhttp.ResponseError](err); ok {
 		return classifyHTTPError(httpErr.HTTPStatusCode())
 	}
 

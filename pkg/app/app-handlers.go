@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -147,7 +148,7 @@ func (s *App) loadAndRenderBucketContents(
 	if err != nil {
 		// Invalid page parameter, redirect to page 1
 		s.log.Warn("Invalid page parameter", slog.String("error", err.Error()))
-		redirectURL := fmt.Sprintf("/?folder=%s&page=1", folderPath)
+		redirectURL := fmt.Sprintf("/?folder=%s&page=1", url.QueryEscape(folderPath))
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return nil
 	}
@@ -174,7 +175,7 @@ func (s *App) loadAndRenderBucketContents(
 			slog.Int("requested", page),
 			slog.Int("valid", validPage),
 			slog.Int("totalPages", paging.TotalPages))
-		redirectURL := fmt.Sprintf("/?folder=%s&page=1", folderPath)
+		redirectURL := fmt.Sprintf("/?folder=%s&page=1", url.QueryEscape(folderPath))
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return nil
 	}
@@ -346,7 +347,7 @@ func (s *App) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, "/?folder="+f, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/?folder="+url.QueryEscape(f), http.StatusTemporaryRedirect)
 }
 
 // HealthCheckHandler provides overall application health status.

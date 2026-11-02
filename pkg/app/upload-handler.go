@@ -58,7 +58,8 @@ func (s *App) processUpload(ctx context.Context, w http.ResponseWriter, r *http.
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize+1<<20)
 
 	// Parse multipart form
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
+	// gosec G120 cannot see the MaxBytesReader on r.Body above, so it flags this regardless.
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil { //nolint:gosec // body bounded by MaxBytesReader
 		s.log.Error("Failed to parse multipart form", slog.String("error", err.Error()))
 		return ErrParseUploadRequest
 	}

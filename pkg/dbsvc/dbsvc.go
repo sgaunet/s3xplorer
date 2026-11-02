@@ -519,16 +519,16 @@ func (s *Service) extractObjectName(key string, isFolder bool) string {
 // extractFolderName extracts the folder name from a folder key.
 func (s *Service) extractFolderName(key string) string {
 	folderKey := strings.TrimSuffix(key, "/")
-	if idx := strings.LastIndex(folderKey, "/"); idx != -1 {
-		return folderKey[idx+1:]
+	if _, name, found := strings.CutLast(folderKey, "/"); found {
+		return name
 	}
 	return folderKey
 }
 
 // extractFileName extracts the file name from a file key.
 func (s *Service) extractFileName(key string) string {
-	if idx := strings.LastIndex(key, "/"); idx != -1 {
-		return key[idx+1:]
+	if _, name, found := strings.CutLast(key, "/"); found {
+		return name
 	}
 	return key
 }
